@@ -227,7 +227,7 @@ const DestinationsSection = () => {
           <motion.div
             custom={0}
             variants={headerVariants}
-            className="flex items-center gap-1.5 p-1 rounded-2xl bg-secondary/60 border border-border/60 w-fit"
+            className="flex flex-wrap items-center gap-1.5 p-1 rounded-2xl bg-secondary/60 border border-border/60 w-full sm:w-fit"
           >
             {filters.map((f) => {
               const { label, icon: Icon } = filterConfig[f];
