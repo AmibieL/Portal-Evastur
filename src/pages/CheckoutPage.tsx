@@ -141,7 +141,7 @@ const CheckoutPage = () => {
         .select(`
           *,
           package:packages (
-            id, title, slug, price, cover_image_url, duration, installments, category, travel_date
+            id, title, slug, price, cover_image_url, duration, installments, category, travel_date, available_slots, status
           )
         `)
         .eq("user_id", user!.id)
@@ -234,6 +234,13 @@ const CheckoutPage = () => {
     }, 0);
 
   const total = calculateTotal();
+
+  // Verifica se algum item excede vagas disponíveis
+  const slotsExceeded = cartItems.some((item: any) => {
+    const slots = item.package?.available_slots;
+    return slots != null && item.people > slots;
+  });
+  const soldOutItems = cartItems.filter((item: any) => item.package?.status === "esgotado");
 
   const formatCpf = (value: string) => {
     const digits = value.replace(/\D/g, "").slice(0, 11);
@@ -712,7 +719,7 @@ const CheckoutPage = () => {
                             : "bg-primary hover:bg-primary/90 text-primary-foreground"
                       }`}
                       onClick={() => checkoutMutation.mutate()}
-                      disabled={checkoutMutation.isPending || isRedirecting || !clientCpf}
+                      disabled={checkoutMutation.isPending || isRedirecting || !clientCpf || slotsExceeded || soldOutItems.length > 0}
                     >
                       {checkoutMutation.isPending || isRedirecting ? (
                         <Loader2 className="animate-spin" size={20} />
@@ -732,6 +739,18 @@ const CheckoutPage = () => {
                     {!clientCpf && (
                       <p className="text-xs text-center text-amber-600 font-medium">
                         ⚠️ Preencha seu CPF para continuar
+                      </p>
+                    )}
+
+                    {slotsExceeded && (
+                      <p className="text-xs text-center text-red-600 font-medium">
+                        ⚠️ Um ou mais pacotes não tem vagas suficientes para a quantidade selecionada
+                      </p>
+                    )}
+
+                    {soldOutItems.length > 0 && (
+                      <p className="text-xs text-center text-red-600 font-medium">
+                        ❌ {soldOutItems.map((i: any) => i.package?.title).join(", ")} está esgotado
                       </p>
                     )}
 

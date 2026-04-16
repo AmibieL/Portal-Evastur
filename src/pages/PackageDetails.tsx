@@ -73,7 +73,7 @@ const PackageDetails = () => {
       // Pacotes novos usam o campo texto destination_name direto
       let pkgQuery = supabase
         .from("packages")
-        .select("*, package_inclusions(inclusion_key, label), package_itinerary_days(day_number, title, description), package_images(image_url, sort_order)");
+        .select("*, package_inclusions(inclusion_key, label), package_itinerary_days(day_number, title, description), package_images(image_url, sort_order), available_slots, total_slots");
 
       if (isUuid) {
         pkgQuery = pkgQuery.eq("id", slugParam!);
@@ -235,6 +235,8 @@ const PackageDetails = () => {
   const installments = pkg.installments || 10;
   const isInternal = pkg.category === "interno";
   const isSoldOut = pkg.status === "esgotado";
+  const availableSlots: number | null = (pkg as any).available_slots ?? null;
+  const totalSlots: number | null = (pkg as any).total_slots ?? null;
 
   // Calcula o total dos extras do cardápio
   const menuExtrasTotal = menuItems
@@ -619,6 +621,25 @@ const PackageDetails = () => {
                     ou {installments}x de <strong className="text-foreground">R$ {installmentValue.toLocaleString("pt-BR")}</strong>
                   </p>
                 </div>
+
+                {/* Vagas disponíveis */}
+                {!isSoldOut && availableSlots != null && availableSlots > 0 && (
+                  <div className={`flex items-center gap-2 text-sm py-3 px-3 rounded-xl border ${
+                    availableSlots <= 5
+                      ? "bg-amber-50 border-amber-200 text-amber-700"
+                      : "bg-emerald-50 border-emerald-200 text-emerald-700"
+                  }`}>
+                    <Users size={16} className={availableSlots <= 5 ? "text-amber-500" : "text-emerald-500"} />
+                    <div>
+                      <span className={`font-bold ${availableSlots <= 5 ? "animate-pulse" : ""}`}>
+                        {availableSlots <= 5 ? `Últimas ${availableSlots} vaga${availableSlots !== 1 ? "s" : ""}!` : `${availableSlots} vagas disponíveis`}
+                      </span>
+                      {totalSlots && (
+                        <p className="text-xs opacity-70">de {totalSlots} no total</p>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 {isSoldOut && (
                   <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-center gap-3">

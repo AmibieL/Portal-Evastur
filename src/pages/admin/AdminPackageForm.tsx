@@ -29,7 +29,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import {
   ArrowLeft, Plus, Trash2, Loader2, Send, Package,
-  Image, FileText, CheckSquare, Map, Info, UtensilsCrossed,
+  Image, FileText, CheckSquare, Map, Info, UtensilsCrossed, Users,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -131,6 +131,7 @@ export default function AdminPackageForm() {
   const [installments, setInstallments] = useState("10");
   const [travelDate, setTravelDate] = useState("");
   const [menuItems, setMenuItems] = useState<MenuItemDraft[]>([]);
+  const [totalSlots, setTotalSlots] = useState("");
 
 
   const { isLoading } = useQuery({
@@ -181,6 +182,7 @@ export default function AdminPackageForm() {
       setCoverImageUrl(pkg.cover_image_url || null);
       setInstallments(String(pkg.installments || 10));
       setTravelDate((pkg as any).travel_date ? (pkg as any).travel_date.split("T")[0] : "");
+      setTotalSlots((pkg as any).available_slots != null ? String((pkg as any).available_slots) : "");
       setSelectedInclusions(inclusions?.map((i) => i.inclusion_key) || []);
       setItinerary(
         days?.map((d) => ({
@@ -204,7 +206,8 @@ export default function AdminPackageForm() {
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const pkgData = {
+      const slotsValue = totalSlots ? parseInt(totalSlots) : null;
+      const pkgData: any = {
         title,
         slug,
         destination_name: destinationName || null,
@@ -219,6 +222,19 @@ export default function AdminPackageForm() {
         travel_date: travelDate || null,
         updated_at: new Date().toISOString(),
       };
+
+      if (!isEditing) {
+        // Na criação: total_slots e available_slots iguais
+        pkgData.total_slots = slotsValue;
+        pkgData.available_slots = slotsValue;
+      } else {
+        // Na edição: admin ajusta available_slots direto
+        pkgData.available_slots = slotsValue;
+        // Se o total_slots original era null e agora definiu, atualiza também
+        if (slotsValue !== null) {
+          pkgData.total_slots = slotsValue;
+        }
+      }
 
       let pkgId = id;
 
@@ -520,6 +536,27 @@ export default function AdminPackageForm() {
                 />
               </div>
             )}
+
+            {/* Vagas disponíveis */}
+            <div className="space-y-1.5">
+              <Label className="text-sm font-medium flex items-center gap-1.5">
+                <Users size={14} className="text-muted-foreground" />
+                Vagas disponíveis
+              </Label>
+              <Input
+                type="number"
+                min={0}
+                value={totalSlots}
+                onChange={(e) => setTotalSlots(e.target.value)}
+                placeholder="Ilimitado"
+                className="h-11"
+              />
+              <p className="text-xs text-muted-foreground">
+                {totalSlots
+                  ? `${totalSlots} vaga(s) — ao esgotar, o pacote será marcado como esgotado automaticamente`
+                  : "Deixe vazio para vagas ilimitadas"}
+              </p>
+            </div>
 
 
             {/* Status de venda */}
