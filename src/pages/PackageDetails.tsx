@@ -712,6 +712,66 @@ const PackageDetails = () => {
                   </div>
                 )}
 
+                {/* Route Info — Trajeto Ida e Volta */}
+                {(() => {
+                  const ri = (pkg as any).route_info;
+                  if (!ri || typeof ri !== "object") return null;
+                  const dep = ri.departure;
+                  const ret = ri.return;
+                  const hasDep = dep && (dep.from || dep.to);
+                  const hasRet = ret && (ret.from || ret.to);
+                  if (!hasDep && !hasRet) return null;
+
+                  const formatRouteDate = (d: string) => {
+                    if (!d) return "";
+                    const [y, m, day] = d.split("-");
+                    return `${day}/${m}`;
+                  };
+
+                  return (
+                    <div className="space-y-2.5 py-3 border-b">
+                      <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                        <Plane size={15} className="text-indigo-500" />
+                        Trajeto
+                      </div>
+                      {hasDep && (
+                        <div className="flex items-start gap-3 p-3 rounded-xl bg-indigo-50/60 border border-indigo-100">
+                          <div className="w-7 h-7 rounded-full bg-indigo-500 text-white flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">
+                            →
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-indigo-800">
+                              {dep.from} <ArrowRight size={12} className="inline mx-1 text-indigo-400" /> {dep.to}
+                            </p>
+                            <p className="text-xs text-indigo-600/80 mt-0.5">
+                              {dep.date ? formatRouteDate(dep.date) : ""}
+                              {dep.date && dep.time ? " • " : ""}
+                              {dep.time ? `Saída às ${dep.time}h` : ""}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                      {hasRet && (
+                        <div className="flex items-start gap-3 p-3 rounded-xl bg-emerald-50/60 border border-emerald-100">
+                          <div className="w-7 h-7 rounded-full bg-emerald-500 text-white flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">
+                            ←
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-emerald-800">
+                              {ret.from} <ArrowRight size={12} className="inline mx-1 text-emerald-400" /> {ret.to}
+                            </p>
+                            <p className="text-xs text-emerald-600/80 mt-0.5">
+                              {ret.date ? formatRouteDate(ret.date) : ""}
+                              {ret.date && ret.time ? " • " : ""}
+                              {ret.time ? `Saída às ${ret.time}h` : ""}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
 
                 {isSoldOut ? (
                   <>
@@ -789,6 +849,30 @@ const PackageDetails = () => {
                 </p>
               </CardContent>
             </Card>
+
+            {/* Package Details — Detalhes do Pacote */}
+            {(() => {
+              const pd = (pkg as any).package_details;
+              if (!pd || !Array.isArray(pd) || pd.length === 0) return null;
+
+              return (
+                <div className="mt-4 p-5 rounded-xl border border-border bg-white shadow-sm space-y-4">
+                  <h3 className="font-bold text-sm text-primary flex items-center gap-2">
+                    <Info size={16} />
+                    Detalhes Importantes
+                  </h3>
+                  <div className="space-y-3">
+                    {pd.map((item: any, i: number) => (
+                      <div key={i} className="flex flex-col gap-0.5">
+                        <span className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wider">{item.label}</span>
+                        <span className="text-sm text-foreground font-medium leading-tight">{item.value}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
+
           </div>
         </div>
       </div>
