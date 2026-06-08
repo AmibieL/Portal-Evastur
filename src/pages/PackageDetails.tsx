@@ -20,6 +20,7 @@ import Navbar from "@/components/Navbar";
 import { toast } from "sonner";
 import QuoteFormDialog from "@/components/QuoteFormDialog";
 import { useSiteSettings } from "@/hooks/useSiteSettings";
+import { getAirlineInfo } from "@/components/AirlineSelect";
 
 const fadeUp = {
   hidden: { opacity: 0, y: 24 },
@@ -825,14 +826,24 @@ const PackageDetails = () => {
                         {/* Body: Airline + Times + Route */}
                         <div className="px-4 py-4">
                           {/* Airline row */}
-                          {airline && (
-                            <div className="flex items-center gap-2 mb-3">
-                              <div className={`w-5 h-5 rounded-full ${c.dot} border-2 flex items-center justify-center`}>
-                                <div className={`w-1.5 h-1.5 rounded-full ${c.labelBg}`} />
+                          {airline && (() => {
+                            const info = getAirlineInfo(airline);
+                            return (
+                              <div className="flex items-center gap-2 mb-3">
+                                <div className={`w-7 h-7 rounded-lg bg-white border border-slate-200 flex items-center justify-center overflow-hidden shadow-sm flex-shrink-0`}>
+                                  {info?.logo ? (
+                                    <img src={info.logo} alt={airline} className="w-5 h-5 object-contain" />
+                                  ) : (
+                                    <div className={`w-1.5 h-1.5 rounded-full ${c.labelBg}`} />
+                                  )}
+                                </div>
+                                <span className="text-sm font-semibold text-slate-700">{airline}</span>
+                                {info?.iata && (
+                                  <span className="text-[10px] font-mono bg-slate-100 px-1.5 py-0.5 rounded text-slate-400">{info.iata}</span>
+                                )}
                               </div>
-                              <span className="text-sm font-semibold text-slate-700">{airline}</span>
-                            </div>
-                          )}
+                            );
+                          })()}
 
                           {/* Times + Stops + Duration row */}
                           <div className="flex items-center gap-3">

@@ -41,6 +41,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "react-router-dom";
 import { ImageUpload, MultiImageUpload } from "@/components/ImageUpload";
+import AirlineSelect, { getAirlineInfo } from "@/components/AirlineSelect";
 
 
 function slugify(text: string) {
@@ -814,11 +815,9 @@ export default function AdminPackageForm() {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="space-y-1">
                   <Label className="text-xs text-muted-foreground">Companhia Aérea</Label>
-                  <Input
+                  <AirlineSelect
                     value={routeDepartureAirline}
-                    onChange={(e) => setRouteDepartureAirline(e.target.value)}
-                    placeholder="Ex: LATAM, GOL, Azul"
-                    className="h-10"
+                    onChange={setRouteDepartureAirline}
                   />
                 </div>
                 <div className="space-y-1">
@@ -853,7 +852,16 @@ export default function AdminPackageForm() {
                   <span className="font-mono font-bold text-indigo-800">{routeDepartureAirportFrom}</span>
                   <span className="text-indigo-400">→</span>
                   <span className="font-mono font-bold text-indigo-800">{routeDepartureAirportTo}</span>
-                  {routeDepartureAirline && <span className="text-muted-foreground">• {routeDepartureAirline}</span>}
+                  {routeDepartureAirline && (() => {
+                    const info = getAirlineInfo(routeDepartureAirline);
+                    return (
+                      <span className="flex items-center gap-1.5 text-muted-foreground">
+                        •
+                        {info?.logo && <img src={info.logo} alt="" className="w-4 h-4 rounded-sm object-contain" />}
+                        {routeDepartureAirline}
+                      </span>
+                    );
+                  })()}
                   {routeDepartureTime && <span className="text-muted-foreground">• {routeDepartureTime}</span>}
                   {routeDepartureArrivalTime && <span className="text-muted-foreground">→ {routeDepartureArrivalTime}</span>}
                   {routeDepartureDuration && <span className="text-indigo-600 font-medium ml-auto">{routeDepartureDuration}</span>}
@@ -954,11 +962,9 @@ export default function AdminPackageForm() {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="space-y-1">
                   <Label className="text-xs text-muted-foreground">Companhia Aérea</Label>
-                  <Input
+                  <AirlineSelect
                     value={routeReturnAirline}
-                    onChange={(e) => setRouteReturnAirline(e.target.value)}
-                    placeholder="Ex: LATAM, GOL, Azul"
-                    className="h-10"
+                    onChange={setRouteReturnAirline}
                   />
                 </div>
                 <div className="space-y-1">
@@ -993,7 +999,16 @@ export default function AdminPackageForm() {
                   <span className="font-mono font-bold text-emerald-800">{routeReturnAirportFrom}</span>
                   <span className="text-emerald-400">→</span>
                   <span className="font-mono font-bold text-emerald-800">{routeReturnAirportTo}</span>
-                  {routeReturnAirline && <span className="text-muted-foreground">• {routeReturnAirline}</span>}
+                  {routeReturnAirline && (() => {
+                    const info = getAirlineInfo(routeReturnAirline);
+                    return (
+                      <span className="flex items-center gap-1.5 text-muted-foreground">
+                        •
+                        {info?.logo && <img src={info.logo} alt="" className="w-4 h-4 rounded-sm object-contain" />}
+                        {routeReturnAirline}
+                      </span>
+                    );
+                  })()}
                   {routeReturnTime && <span className="text-muted-foreground">• {routeReturnTime}</span>}
                   {routeReturnArrivalTime && <span className="text-muted-foreground">→ {routeReturnArrivalTime}</span>}
                   {routeReturnDuration && <span className="text-emerald-600 font-medium ml-auto">{routeReturnDuration}</span>}
