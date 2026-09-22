@@ -1,19 +1,36 @@
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Globe2, Loader2, MapPin, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
-import { MapPin, Plus, Pencil, Trash2, Search, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import DestinationFormSheet from "@/components/admin/DestinationFormSheet";
+import { getCatalogDeleteErrorDescription } from "@/lib/catalogDeleteError";
 
 type Destination = Tables<"destinations">;
 
+const statusStyles: Record<string, string> = {
+  draft: "border-amber-200 bg-amber-50 text-amber-700",
+  published: "border-emerald-200 bg-emerald-50 text-emerald-700",
+  archived: "border-slate-200 bg-slate-50 text-slate-600",
+};
+
+const statusLabels: Record<string, string> = {
+  draft: "Rascunho",
+  published: "Publicado",
+  archived: "Arquivado",
+};
+
+const regionLabels: Record<string, string> = {
+  regional: "Regional",
+  national: "Nacional",
+  international: "Internacional",
+};
+
 export default function AdminDestinations() {
   const [search, setSearch] = useState("");
-  const [sheetOpen, setSheetOpen] = useState(false);
-  const [editing, setEditing] = useState<Destination | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -29,160 +46,130 @@ export default function AdminDestinations() {
     },
   });
 
-  const upsertMutation = useMutation({
-    mutationFn: async (dest: Partial<Destination> & { name: string; slug: string }) => {
-      if (dest.id) {
-        const { error } = await supabase
-          .from("destinations")
-          .update({
-            name: dest.name,
-            slug: dest.slug,
-            subtitle: dest.subtitle,
-            description: dest.description,
-            cover_image_url: dest.cover_image_url,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", dest.id);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase.from("destinations").insert({
-          name: dest.name,
-          slug: dest.slug,
-          subtitle: dest.subtitle,
-          description: dest.description,
-          cover_image_url: dest.cover_image_url,
-        });
-        if (error) throw error;
-      }
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["admin-destinations"] });
-      toast({ title: editing ? "Destino atualizado!" : "Destino criado!" });
-      setSheetOpen(false);
-      setEditing(null);
-    },
-    onError: (err: Error) => {
-      toast({ title: "Erro ao salvar destino", description: err.message, variant: "destructive" });
-    },
-  });
-
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase.from("destinations").delete().eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["admin-destinations"] });
-      toast({ title: "Destino excluído!" });
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["admin-destinations"] });
+      toast({ title: "Destino excluído." });
     },
-    onError: (err: Error) => {
-      toast({ title: "Erro ao excluir", description: err.message, variant: "destructive" });
+    onError: (error) => {
+      console.error("Erro ao excluir destino:", error);
+      toast({
+        title: "Erro ao excluir destino",
+        description: getCatalogDeleteErrorDescription(error, "destination"),
+        variant: "destructive",
+      });
     },
   });
 
-  const filtered = destinations.filter(
-    (d) =>
-      d.name.toLowerCase().includes(search.toLowerCase()) ||
-      d.slug.toLowerCase().includes(search.toLowerCase())
-  );
-
-  const handleEdit = (dest: Destination) => {
-    setEditing(dest);
-    setSheetOpen(true);
-  };
-
-  const handleNew = () => {
-    setEditing(null);
-    setSheetOpen(true);
-  };
-
-  const handleSave = (dest: { name: string; slug: string; subtitle?: string; description?: string; cover_image_url?: string; id?: string }) => {
-    upsertMutation.mutate(dest);
-  };
+  const filtered = destinations.filter((destination) => {
+    const term = search.toLowerCase();
+    return destination.name.toLowerCase().includes(term)
+      || destination.slug.toLowerCase().includes(term)
+      || (destination.city || "").toLowerCase().includes(term);
+  });
 
   return (
     <div>
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+      <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-primary">Gerenciar Destinos</h1>
-          <p className="text-muted-foreground text-sm">{destinations.length} destinos cadastrados</p>
+          <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Catálogo</p>
+          <h1 className="text-2xl font-bold text-foreground">Destinos turísticos</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Conteúdo editorial dos lugares apresentados e vendidos pela Evastur
+          </p>
         </div>
-        <Button onClick={handleNew} className="gap-2">
-          <Plus size={18} /> Novo Destino
+        <Button asChild className="gap-2">
+          <Link to="/admin/destinos/novo"><Plus size={17} />Novo destino</Link>
         </Button>
       </div>
 
-      <div className="bg-card rounded-xl border shadow-sm">
-        <div className="p-4 border-b">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
-            <Input
-              placeholder="Buscar destinos..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-10"
-            />
-          </div>
+      <div className="mb-5 grid gap-3 sm:grid-cols-3">
+        <div className="rounded-xl border border-border bg-card p-4">
+          <p className="text-2xl font-bold text-foreground">{destinations.length}</p>
+          <p className="text-xs text-muted-foreground">Destinos cadastrados</p>
         </div>
+        <div className="rounded-xl border border-border bg-card p-4">
+          <p className="text-2xl font-bold text-emerald-600">{destinations.filter((item) => item.publication_status === "published").length}</p>
+          <p className="text-xs text-muted-foreground">Publicados</p>
+        </div>
+        <div className="rounded-xl border border-border bg-card p-4">
+          <p className="text-2xl font-bold text-amber-600">{destinations.filter((item) => item.publication_status === "draft").length}</p>
+          <p className="text-xs text-muted-foreground">Rascunhos</p>
+        </div>
+      </div>
 
-        {isLoading ? (
-          <div className="flex items-center justify-center py-16">
-            <Loader2 className="animate-spin text-muted-foreground" size={32} />
-          </div>
-        ) : (
-          <div className="divide-y">
-            <div className="grid grid-cols-[60px_1fr_1fr_auto] items-center px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-              <span>Capa</span>
-              <span>Nome do Destino</span>
-              <span>Slug</span>
-              <span>Ações</span>
-            </div>
-            {filtered.map((dest) => (
-              <div
-                key={dest.id}
-                className="grid grid-cols-[60px_1fr_1fr_auto] items-center px-4 py-3 hover:bg-muted/30 transition-colors"
-              >
-                <div className="w-10 h-10 rounded-lg overflow-hidden bg-muted">
-                  {dest.cover_image_url ? (
-                    <img src={dest.cover_image_url} alt={dest.name} className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center">
-                      <MapPin size={16} className="text-muted-foreground" />
-                    </div>
+      <div className="mb-5 max-w-xl">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={17} />
+          <Input value={search} onChange={(event) => setSearch(event.target.value)} className="pl-9" placeholder="Buscar por nome, cidade ou slug..." />
+        </div>
+      </div>
+
+      {isLoading ? (
+        <div className="flex justify-center py-20"><Loader2 className="animate-spin text-primary" size={30} /></div>
+      ) : filtered.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-border bg-card py-20 text-center">
+          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-muted text-muted-foreground"><MapPin size={23} /></div>
+          <p className="font-medium text-foreground">Nenhum destino encontrado</p>
+          <p className="mt-1 text-sm text-muted-foreground">{search ? "Tente outro termo de busca." : "Cadastre o primeiro destino turístico."}</p>
+        </div>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {filtered.map((destination) => (
+            <article key={destination.id} className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+              <div className="relative aspect-[16/9] bg-muted">
+                {destination.cover_image_url ? (
+                  <img src={destination.cover_image_url} alt={destination.name} className="h-full w-full object-cover" />
+                ) : (
+                  <div className="flex h-full items-center justify-center text-muted-foreground"><Globe2 size={32} /></div>
+                )}
+                <span className={`absolute left-3 top-3 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${statusStyles[destination.publication_status] || statusStyles.draft}`}>
+                  {statusLabels[destination.publication_status] || destination.publication_status}
+                </span>
+              </div>
+              <div className="p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <h2 className="truncate font-semibold text-foreground">{destination.name}</h2>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {[destination.city, destination.state, destination.country].filter(Boolean).join(" · ") || "Localização não informada"}
+                    </p>
+                  </div>
+                  {destination.region_type && (
+                    <span className="shrink-0 rounded-full bg-secondary px-2 py-1 text-[11px] font-medium text-muted-foreground">
+                      {regionLabels[destination.region_type] || destination.region_type}
+                    </span>
                   )}
                 </div>
-                <span className="font-medium text-foreground">{dest.name}</span>
-                <span className="text-sm text-muted-foreground font-mono">/{dest.slug}</span>
-                <div className="flex items-center gap-1">
-                  <Button variant="ghost" size="icon" onClick={() => handleEdit(dest)}>
-                    <Pencil size={16} />
+                <p className="mt-3 line-clamp-2 min-h-10 text-sm text-muted-foreground">
+                  {destination.summary || destination.subtitle || "Sem resumo cadastrado."}
+                </p>
+                <div className="mt-4 flex gap-2 border-t border-border pt-4">
+                  <Button asChild variant="outline" size="sm" className="flex-1 gap-2">
+                    <Link to={`/admin/destinos/${destination.id}/editar`}><Pencil size={14} />Editar</Link>
                   </Button>
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="text-destructive hover:text-destructive"
-                    onClick={() => deleteMutation.mutate(dest.id)}
+                    className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    onClick={() => {
+                      if (window.confirm(`Excluir o destino "${destination.name}"? Os vínculos dele com pacotes serão removidos, mas os pacotes serão mantidos.`)) {
+                        deleteMutation.mutate(destination.id);
+                      }
+                    }}
                   >
-                    <Trash2 size={16} />
+                    <Trash2 size={15} />
                   </Button>
                 </div>
               </div>
-            ))}
-            {filtered.length === 0 && !isLoading && (
-              <div className="py-12 text-center text-muted-foreground">
-                Nenhum destino encontrado.
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      <DestinationFormSheet
-        open={sheetOpen}
-        onOpenChange={setSheetOpen}
-        destination={editing}
-        onSave={handleSave}
-      />
+            </article>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

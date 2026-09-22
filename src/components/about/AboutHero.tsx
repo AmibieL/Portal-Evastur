@@ -1,4 +1,4 @@
-import { Phone, Compass, ChevronDown, Sparkles, MapPin } from "lucide-react";
+import { Phone, Compass, ChevronDown, MapPin } from "lucide-react";
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import heroImage from "@/assets/hero-amazon.jpg";
@@ -41,7 +41,7 @@ const AboutHero = () => {
             transition={{ duration: 0.5 }}
             className="inline-flex items-center gap-2.5 bg-white/10 backdrop-blur-md border border-white/15 px-5 py-2.5 rounded-full mb-8"
           >
-            <Sparkles size={14} className="text-amber-400" />
+            <MapPin size={14} className="text-amber-400" />
             <span className="text-white/90 text-sm font-medium tracking-wide">Desde 1996 • Cruzeiro do Sul, Acre</span>
           </motion.div>
 

@@ -13,8 +13,8 @@
  *
  * IMPORTANTE:
  * - O cart_items tem campo menu_selections (JSON) com os itens do cardápio
- * - O campo travel_date no cart_item guarda a data escolhida pelo cliente
- *   ou a data definida pelo admin (depende do tipo de pacote)
+ * - O campo travel_date no cart_item guarda a data definida pelo admin,
+ *   incluindo o horário quando a experiência regional tiver agenda fixa
  * - Invalidar query "cart-count" quando altera itens (Navbar atualiza)
  */
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -28,6 +28,17 @@ import { toast } from "sonner";
 import { Link, useNavigate } from "react-router-dom";
 import Footer from "@/components/Footer";
 import { motion } from "framer-motion";
+import type { Json, TablesUpdate } from "@/integrations/supabase/types";
+
+type MenuSelection = { name?: string; price?: number | string };
+
+function menuSelections(value: Json | null) {
+  return Array.isArray(value) ? value as unknown as MenuSelection[] : [];
+}
+
+function menuExtrasTotal(value: Json | null) {
+  return menuSelections(value).reduce((sum, item) => sum + Number(item.price || 0), 0);
+}
 
 const CartPage = () => {
   const { user } = useAuth();
@@ -56,7 +67,7 @@ const CartPage = () => {
 
   const updateQuantity = useMutation({
     mutationFn: async ({ id, quantity, people }: { id: string; quantity?: number; people?: number }) => {
-      const updates: any = {};
+      const updates: TablesUpdate<"cart_items"> = {};
       if (quantity !== undefined) updates.quantity = Math.max(1, quantity);
       if (people !== undefined) updates.people = Math.max(1, people);
 
@@ -104,11 +115,9 @@ const CartPage = () => {
   };
 
   const calculateTotal = () => {
-    return cartItems.reduce((total, item: any) => {
+    return cartItems.reduce((total, item) => {
       const price = item.package?.price || 0;
-      const menuExtras = Array.isArray(item.menu_selections)
-        ? (item.menu_selections as any[]).reduce((s: number, m: any) => s + Number(m.price || 0), 0)
-        : 0;
+      const menuExtras = menuExtrasTotal(item.menu_selections);
       return total + (price + menuExtras) * item.people;
     }, 0);
   };
@@ -141,7 +150,7 @@ const CartPage = () => {
             <div className="grid lg:grid-cols-3 gap-8">
               {/* Items List */}
               <div className="lg:col-span-2 space-y-4">
-                {cartItems.map((item: any, index) => (
+                {cartItems.map((item, index) => (
                   <motion.div
                     key={item.id}
                     initial={{ opacity: 0, y: 10 }}
@@ -209,9 +218,7 @@ const CartPage = () => {
                               <div className="text-right">
                                 <p className="text-xs text-muted-foreground">Subtotal</p>
                                 {(() => {
-                                  const menuExtras = Array.isArray(item.menu_selections)
-                                    ? (item.menu_selections as any[]).reduce((s: number, m: any) => s + Number(m.price || 0), 0)
-                                    : 0;
+                                  const menuExtras = menuExtrasTotal(item.menu_selections);
                                   const basePrice = item.package?.price || 0;
                                   return (
                                     <>
@@ -237,7 +244,7 @@ const CartPage = () => {
                                   <span>Itens do cardápio selecionados:</span>
                                 </div>
                                 <div className="flex flex-wrap gap-1.5">
-                                  {(item.menu_selections as any[]).map((m: any, idx: number) => (
+                                  {menuSelections(item.menu_selections).map((m, idx) => (
                                     <span key={idx} className="text-xs bg-orange-50 border border-orange-200 text-orange-700 rounded-full px-2.5 py-0.5">
                                       {m.name} — {formatBRL(Number(m.price))}
                                     </span>
@@ -307,7 +314,7 @@ const CartPage = () => {
                   <p className="text-muted-foreground max-w-sm">Parece que você ainda não escolheu seu próximo destino. Que tal dar uma olhada?</p>
                 </div>
                 <Button asChild size="lg" className="rounded-full px-8 shadow-md">
-                  <Link to="/destinos">Explorar Destinos</Link>
+                  <Link to="/destinos">Explorar Pacotes</Link>
                 </Button>
               </CardContent>
             </Card>

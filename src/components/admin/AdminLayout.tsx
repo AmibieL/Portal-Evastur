@@ -12,7 +12,7 @@
  * SIDEBAR:
  * - Desktop: fixa à esquerda (w-60), sempre visível
  * - Mobile: botão hamburger abre um Sheet lateral
- * - Itens: Painel, Pacotes, Reservas, Vouchers, Cruzeiro do Sul, Financeiro
+ * - Itens: Painel, catálogo, Reservas, Vouchers e Financeiro
  *
  * Se precisar adicionar uma nova seção admin, adicione ao array navItems
  * E crie a rota correspondente em App.tsx
@@ -22,7 +22,6 @@ import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import {
   LayoutDashboard,
-  Package,
   ClipboardList,
   DollarSign,
   Menu,
@@ -30,53 +29,69 @@ import {
   Mountain,
   ChevronRight,
   Ticket,
+  Plane,
 } from "lucide-react";
 import logoEvastur from "@/assets/logo-evastur.png";
 import { cn } from "@/lib/utils";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
 
-const navItems = [
+const navSections = [
   {
-    title: "Painel",
-    icon: LayoutDashboard,
-    path: "/admin",
-    color: "text-sky-400",
-    bg: "bg-sky-400/10",
+    label: "Visão geral",
+    items: [
+      {
+        title: "Painel",
+        icon: LayoutDashboard,
+        path: "/admin",
+        color: "text-sky-400",
+        bg: "bg-sky-400/10",
+      },
+    ],
   },
   {
-    title: "Pacotes",
-    icon: Package,
-    path: "/admin/pacotes",
-    color: "text-violet-400",
-    bg: "bg-violet-400/10",
+    label: "Catálogo",
+    items: [
+      {
+        title: "Pacotes externos",
+        icon: Plane,
+        path: "/admin/pacotes/externos",
+        color: "text-violet-400",
+        bg: "bg-violet-400/10",
+      },
+      {
+        title: "Experiências regionais",
+        icon: Mountain,
+        path: "/admin/pacotes/regionais",
+        color: "text-emerald-400",
+        bg: "bg-emerald-400/10",
+      },
+    ],
   },
   {
-    title: "Reservas",
-    icon: ClipboardList,
-    path: "/admin/reservas",
-    color: "text-amber-400",
-    bg: "bg-amber-400/10",
-  },
-  {
-    title: "Vouchers",
-    icon: Ticket,
-    path: "/admin/vouchers",
-    color: "text-cyan-400",
-    bg: "bg-cyan-400/10",
-  },
-  {
-    title: "Cruzeiro do Sul",
-    icon: Mountain,
-    path: "/admin/cruzeiro",
-    color: "text-emerald-400",
-    bg: "bg-emerald-400/10",
-  },
-  {
-    title: "Financeiro",
-    icon: DollarSign,
-    path: "/admin/financeiro",
-    color: "text-rose-400",
-    bg: "bg-rose-400/10",
+    label: "Vendas",
+    items: [
+      {
+        title: "Reservas",
+        icon: ClipboardList,
+        path: "/admin/reservas",
+        color: "text-amber-400",
+        bg: "bg-amber-400/10",
+      },
+      {
+        title: "Vouchers",
+        icon: Ticket,
+        path: "/admin/vouchers",
+        color: "text-cyan-400",
+        bg: "bg-cyan-400/10",
+      },
+      {
+        title: "Financeiro",
+        icon: DollarSign,
+        path: "/admin/financeiro",
+        color: "text-rose-400",
+        bg: "bg-rose-400/10",
+      },
+    ],
   },
 ];
 
@@ -87,7 +102,7 @@ function SidebarContent({
   currentPath: string;
   onNavigate?: () => void;
 }) {
-  const { signOut, profile, user } = useAuth();
+  const { signOut } = useAuth();
   const navigate = useNavigate();
 
   const handleLogout = async (e: React.MouseEvent) => {
@@ -129,64 +144,54 @@ function SidebarContent({
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 px-3 py-5 space-y-1">
-        {navItems.map((item) => {
-          const isExact = item.path === "/admin";
-          const active = isExact
-            ? currentPath === "/admin"
-            : currentPath.startsWith(item.path);
+      <nav className="flex-1 px-3 py-5 space-y-5 overflow-y-auto">
+        {navSections.map((section) => (
+          <div key={section.label} className="space-y-1">
+            <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/25">
+              {section.label}
+            </p>
+            {section.items.map((item) => {
+              const isExact = item.path === "/admin";
+              const active = isExact
+                ? currentPath === "/admin"
+                : currentPath.startsWith(item.path);
 
-          return (
-            <Link
-              key={item.path}
-              to={item.path}
-              onClick={onNavigate}
-              className={cn(
-                "group flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150",
-                active
-                  ? "bg-white/10 text-white"
-                  : "text-white/50 hover:bg-white/5 hover:text-white/80"
-              )}
-            >
-              <div
-                className={cn(
-                  "w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-colors",
-                  active ? item.bg : "bg-white/5 group-hover:bg-white/8"
-                )}
-              >
-                <item.icon
-                  size={16}
-                  className={active ? item.color : "text-white/40 group-hover:text-white/60"}
-                />
-              </div>
-              <span>{item.title}</span>
-              {active && (
-                <ChevronRight size={14} className="ml-auto text-white/30" />
-              )}
-            </Link>
-          );
-        })}
+              return (
+                <Link
+                  key={item.path}
+                  to={item.path}
+                  onClick={onNavigate}
+                  className={cn(
+                    "group flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150",
+                    active
+                      ? "bg-white/10 text-white"
+                      : "text-white/50 hover:bg-white/5 hover:text-white/80"
+                  )}
+                >
+                  <div
+                    className={cn(
+                      "w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-colors",
+                      active ? item.bg : "bg-white/5 group-hover:bg-white/8"
+                    )}
+                  >
+                    <item.icon
+                      size={16}
+                      className={active ? item.color : "text-white/40 group-hover:text-white/60"}
+                    />
+                  </div>
+                  <span className="min-w-0 flex-1 leading-tight">{item.title}</span>
+                  {active && (
+                    <ChevronRight size={14} className="ml-auto text-white/30" />
+                  )}
+                </Link>
+              );
+            })}
+          </div>
+        ))}
       </nav>
 
-      {/* User footer */}
-      <div className="px-3 pb-5 border-t border-white/5 pt-4 space-y-1">
-        {/* User Info */}
-        <div className="flex items-center gap-3 px-3 py-2.5 mb-1">
-          <div
-            className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 font-bold text-xs text-white"
-            style={{ background: "hsl(350 100% 45%)" }}
-          >
-            {profile?.full_name?.charAt(0)?.toUpperCase() ||
-              user?.email?.charAt(0)?.toUpperCase() ||
-              "A"}
-          </div>
-          <div className="min-w-0">
-            <p className="text-white/80 text-sm font-medium truncate leading-none">
-              {profile?.full_name || "Admin"}
-            </p>
-            <p className="text-white/30 text-xs truncate mt-0.5">{user?.email}</p>
-          </div>
-        </div>
+      {/* Account actions */}
+      <div className="px-3 pb-5 border-t border-white/5 pt-4">
         <button
           onClick={handleLogout}
           className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-white/50 hover:bg-white/5 hover:text-white/80 transition-all"

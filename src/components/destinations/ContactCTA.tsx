@@ -1,43 +1,17 @@
-import { Sparkles, Phone, Mail, MessageCircle, ArrowRight, Send, CheckCircle2, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { supabase } from "@/integrations/supabase/client";
+import { ArrowRight, CheckCircle2, Loader2, Mail, MessageCircle, Phone, Send } from "lucide-react";
 import { Link } from "react-router-dom";
+
+import { supabase } from "@/integrations/supabase/client";
 
 const wppText = encodeURIComponent("Olá! Gostaria de falar com um consultor.");
 const wppLink = `https://wa.me/5568999872973?text=${wppText}`;
 
 const contactOptions = [
-  {
-    icon: Phone,
-    title: "WhatsApp",
-    description: "Converse em tempo real com um especialista",
-    cta: "Chamar agora",
-    link: wppLink,
-    accent: "#22c55e",
-    bg: "from-green-500/10 to-green-500/5",
-    border: "border-green-500/20",
-  },
-  {
-    icon: Mail,
-    title: "E-mail",
-    description: "Receba um roteiro exclusivo na sua caixa de entrada",
-    cta: "Enviar e-mail",
-    link: "mailto:contato@evastur.com",
-    accent: "hsl(350 100% 45%)",
-    bg: "from-rose-500/10 to-rose-500/5",
-    border: "border-rose-500/20",
-  },
-  {
-    icon: MessageCircle,
-    title: "Consultoria",
-    description: "Agende uma chamada e cocrie sua próxima experiência",
-    cta: "Agendar agora",
-    link: wppLink,
-    accent: "hsl(45 93% 55%)",
-    bg: "from-amber-500/15 to-amber-500/5",
-    border: "border-amber-500/30",
-  },
+  { icon: Phone, title: "WhatsApp", text: "Atendimento direto", href: wppLink },
+  { icon: Mail, title: "E-mail", text: "contato@evastur.com", href: "mailto:contato@evastur.com" },
+  { icon: MessageCircle, title: "Consultoria", text: "Planeje com nossa equipe", href: wppLink },
 ];
 
 const ContactCTA = () => {
@@ -47,26 +21,23 @@ const ContactCTA = () => {
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState("");
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
     if (!email) return;
-
     setLoading(true);
     setError("");
 
     try {
-      const { error: fnError } = await supabase.functions.invoke("newsletter-subscribe", {
+      const { error: functionError } = await supabase.functions.invoke("newsletter-subscribe", {
         body: { email, name: name || undefined },
       });
-
-      if (fnError) throw fnError;
-
+      if (functionError) throw functionError;
       setSuccess(true);
       setEmail("");
       setName("");
       setTimeout(() => setSuccess(false), 5000);
-    } catch (err: any) {
-      console.error("Error subscribing to newsletter:", err);
+    } catch (submissionError: unknown) {
+      console.error("Error subscribing to newsletter:", submissionError);
       setError("Erro ao assinar. Tente novamente.");
     } finally {
       setLoading(false);
@@ -74,187 +45,102 @@ const ContactCTA = () => {
   };
 
   return (
-    <section className="py-20 lg:py-28 relative overflow-hidden">
-      {/* Full-bleed navy gradient background */}
-      <div
-        className="absolute inset-0"
-        style={{
-          background:
-            "linear-gradient(135deg, hsl(232 100% 12%) 0%, hsl(232 100% 20%) 100%)",
-        }}
-      />
-      {/* Subtle radial glows */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute top-0 right-0 w-[600px] h-[600px] opacity-20"
-        style={{
-          background: "radial-gradient(circle, hsl(350 100% 45% / 0.3) 0%, transparent 70%)",
-          transform: "translate(30%, -40%)",
-        }}
-      />
-      <div
-        aria-hidden
-        className="pointer-events-none absolute bottom-0 left-0 w-[500px] h-[500px] opacity-15"
-        style={{
-          background: "radial-gradient(circle, hsl(225 76% 49% / 0.4) 0%, transparent 70%)",
-          transform: "translate(-40%, 40%)",
-        }}
-      />
-
-      <div className="container mx-auto px-4 lg:px-8 relative z-10">
-        {/* Header */}
-        <motion.div
-          initial={{ opacity: 0, y: 24 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: "-60px" }}
-          transition={{ duration: 0.55 }}
-          className="text-center max-w-2xl mx-auto mb-14"
-        >
-          <span className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-amber-400 mb-4">
-            <Sparkles size={13} />
-            Pronto para embarcar?
-          </span>
-          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-white leading-tight mb-4">
-            Transforme ideias em{" "}
-            <span
-              style={{
-                background: "linear-gradient(90deg, hsl(45 93% 58%), hsl(350 100% 65%))",
-                WebkitBackgroundClip: "text",
-                WebkitTextFillColor: "transparent",
-              }}
+    <section className="bg-[#051036] py-20 text-white sm:py-24 lg:py-28">
+      <div className="container mx-auto px-5 lg:px-8">
+        <div className="grid gap-14 lg:grid-cols-[1.2fr_0.8fr] lg:gap-20">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: "-60px" }}
+            transition={{ duration: 0.5 }}
+          >
+            <p className="mb-5 text-[11px] font-semibold uppercase tracking-[0.22em] text-white/55">Atendimento Evastur</p>
+            <h2 className="max-w-3xl text-4xl font-semibold leading-[1.03] tracking-[-0.045em] sm:text-5xl lg:text-6xl">
+              Sua próxima viagem começa com uma boa conversa
+            </h2>
+            <p className="mt-6 max-w-2xl text-base leading-relaxed text-white/65">
+              Conte o que você procura. Nossa equipe organiza as possibilidades e ajuda a transformar a ideia em um roteiro viável.
+            </p>
+            <Link
+              to="/contato"
+              className="group mt-9 inline-flex min-h-12 items-center gap-4 bg-[#e00032] px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#c9002d]"
             >
-              roteiros inesquecíveis
-            </span>
-          </h2>
-          <p className="text-white/65 leading-relaxed">
-            Compartilhe seu estilo de viagem e receba propostas exclusivas com fotografias, valores e diferenciais pensados para você.
-          </p>
-        </motion.div>
+              Falar com um especialista
+              <ArrowRight size={16} className="transition-transform group-hover:translate-x-1" />
+            </Link>
+          </motion.div>
 
-        {/* Primary CTA to Contact Page */}
+          <div className="border-t border-white/20">
+            {contactOptions.map((option, index) => (
+              <motion.a
+                key={option.title}
+                href={option.href}
+                target={option.href.startsWith("http") ? "_blank" : undefined}
+                rel={option.href.startsWith("http") ? "noopener noreferrer" : undefined}
+                initial={{ opacity: 0, y: 12 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.4, delay: index * 0.06 }}
+                className="group grid grid-cols-[42px_1fr_auto] items-center gap-4 border-b border-white/20 py-6"
+              >
+                <option.icon size={19} strokeWidth={1.6} className="text-white/65" />
+                <span>
+                  <span className="block text-sm font-semibold">{option.title}</span>
+                  <span className="mt-1 block text-xs text-white/50">{option.text}</span>
+                </span>
+                <ArrowRight size={16} className="text-white/40 transition-transform group-hover:translate-x-1 group-hover:text-white" />
+              </motion.a>
+            ))}
+          </div>
+        </div>
+
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
-          transition={{ duration: 0.4, delay: 0.1 }}
-          className="flex justify-center mb-10"
+          transition={{ duration: 0.45 }}
+          className="mt-16 border-t border-white/20 pt-9 lg:mt-20"
         >
-          <Link
-            to="/contato"
-            className="inline-flex items-center gap-2.5 px-8 py-4 rounded-2xl font-bold text-base text-white shadow-xl hover:opacity-90 hover:-translate-y-1 transition-all duration-200"
-            style={{
-              background: "linear-gradient(135deg, hsl(350 100% 45%), hsl(350 100% 38%))",
-              boxShadow: "0 8px 32px hsl(350 100% 45% / 0.35)",
-            }}
-          >
-            <Sparkles size={18} />
-            Falar com especialista
-            <ArrowRight size={16} className="ml-0.5" />
-          </Link>
-        </motion.div>
-
-        {/* Contact Cards */}
-        <div className="grid sm:grid-cols-3 gap-5 max-w-4xl mx-auto mb-14">
-          {contactOptions.map((opt, i) => (
-            <motion.a
-              key={i}
-              href={opt.link}
-              target="_blank"
-              rel="noopener noreferrer"
-              initial={{ opacity: 0, y: 24 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ duration: 0.4, delay: i * 0.09 }}
-              whileHover={{ y: -6 }}
-              className={`group relative flex flex-col gap-4 p-6 rounded-2xl border bg-gradient-to-br ${opt.bg} ${opt.border} backdrop-blur-sm cursor-pointer overflow-hidden transition-shadow duration-300 hover:shadow-2xl`}
-            >
-              {/* Decorative glow */}
-              <div
-                className="absolute -top-8 -right-8 w-28 h-28 rounded-full opacity-20 group-hover:opacity-40 transition-opacity duration-300"
-                style={{ background: opt.accent }}
-              />
-
-              <div
-                className="w-12 h-12 rounded-xl flex items-center justify-center"
-                style={{ background: `${opt.accent}22` }}
-              >
-                <opt.icon size={22} style={{ color: opt.accent }} />
-              </div>
-
-              <div>
-                <h3 className="text-lg font-bold text-white mb-1">{opt.title}</h3>
-                <p className="text-white/60 text-sm leading-relaxed">{opt.description}</p>
-              </div>
-
-              <span
-                className="inline-flex items-center gap-1.5 text-sm font-semibold mt-auto"
-                style={{ color: opt.accent }}
-              >
-                {opt.cta}
-                <ArrowRight
-                  size={14}
-                  className="group-hover:translate-x-1 transition-transform duration-200"
-                />
-              </span>
-            </motion.a>
-          ))}
-        </div>
-
-        {/* Newsletter */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.5, delay: 0.2 }}
-          className="max-w-2xl mx-auto"
-        >
-          <p className="text-center text-white/50 text-sm mb-4 uppercase tracking-widest font-medium">
-            Receba novidades e promoções
-          </p>
-          
-          {success ? (
-            <div className="flex flex-col items-center gap-2 text-center py-4">
-              <div className="w-12 h-12 bg-emerald-500/20 rounded-full flex items-center justify-center mb-1">
-                <CheckCircle2 size={24} className="text-emerald-400" />
-              </div>
-              <p className="text-emerald-400 font-semibold">Inscrição realizada com sucesso! 🎉</p>
-              <p className="text-white/50 text-xs">Fique de olho na sua caixa de entrada.</p>
+          <div className="grid gap-6 lg:grid-cols-[0.8fr_1.2fr] lg:items-center">
+            <div>
+              <p className="text-sm font-semibold">Novidades e condições especiais</p>
+              <p className="mt-1 text-xs leading-relaxed text-white/50">Receba inspirações de viagem sem excesso de mensagens.</p>
             </div>
-          ) : (
-            <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-3">
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Seu nome (opcional)"
-                className="flex-1 px-5 py-3.5 rounded-xl bg-white/10 border border-white/20 text-white placeholder-white/35 focus:outline-none focus:ring-2 focus:ring-white/30 text-sm backdrop-blur-sm"
-              />
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="seu@email.com"
-                className="flex-[1.5] px-5 py-3.5 rounded-xl bg-white/10 border border-white/20 text-white placeholder-white/35 focus:outline-none focus:ring-2 focus:ring-2 focus:ring-white/30 text-sm backdrop-blur-sm"
-                required
-              />
-              <button
-                type="submit"
-                disabled={loading}
-                className="flex items-center justify-center gap-2 px-7 py-3.5 rounded-xl font-semibold text-sm text-white transition-all hover:opacity-90 hover:-translate-y-0.5 shrink-0 disabled:opacity-50"
-                style={{
-                  background: "linear-gradient(135deg, hsl(350 100% 45%), hsl(350 100% 38%))",
-                }}
-              >
-                {loading ? <Loader2 size={16} className="animate-spin" /> : (
-                  <>
-                    <Send size={15} />
-                    Assinar news
-                  </>
-                )}
-              </button>
-            </form>
-          )}
-          {error && <p className="text-rose-400 text-xs mt-2 text-center">{error}</p>}
+
+            {success ? (
+              <div className="flex items-center gap-3 text-sm font-medium text-emerald-300">
+                <CheckCircle2 size={19} /> Inscrição realizada com sucesso.
+              </div>
+            ) : (
+              <form onSubmit={handleSubmit} className="grid gap-3 sm:grid-cols-[0.8fr_1.2fr_auto]">
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  placeholder="Seu nome"
+                  aria-label="Seu nome"
+                  className="min-h-12 border border-white/25 bg-transparent px-4 text-sm text-white outline-none placeholder:text-white/35 focus:border-white/60"
+                />
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  placeholder="seu@email.com"
+                  aria-label="Seu e-mail"
+                  required
+                  className="min-h-12 border border-white/25 bg-transparent px-4 text-sm text-white outline-none placeholder:text-white/35 focus:border-white/60"
+                />
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="inline-flex min-h-12 items-center justify-center gap-2 bg-white px-5 text-sm font-semibold text-[#051036] transition-colors hover:bg-slate-100 disabled:opacity-50"
+                >
+                  {loading ? <Loader2 size={16} className="animate-spin" /> : <><Send size={15} /> Assinar</>}
+                </button>
+              </form>
+            )}
+          </div>
+          {error && <p className="mt-3 text-right text-xs text-rose-300">{error}</p>}
         </motion.div>
       </div>
     </section>

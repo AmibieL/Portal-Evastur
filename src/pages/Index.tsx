@@ -2,7 +2,7 @@ import { useState } from "react";
 import Navbar from "@/components/Navbar";
 import HeroSection from "@/components/HeroSection";
 import DestinationsSection from "@/components/DestinationsSection";
-import CruzeiroDoSulSection from "@/components/CruzeiroDoSulSection";
+import AcreExperiencesGallery from "@/components/AcreExperiencesGallery";
 import CTABannerHome from "@/components/CTABannerHome";
 import QuoteFormDialog from "@/components/QuoteFormDialog";
 import Footer from "@/components/Footer";
@@ -29,8 +29,8 @@ const Index = () => {
       {/* Seção de Destinos (Nacionais e Internacionais) */}
       <DestinationsSection />
 
-      {/* Seção Especial: Destinos do Cruzeiro do Sul */}
-      <CruzeiroDoSulSection />
+      {/* Galeria editorial das experiências e paisagens do Acre */}
+      <AcreExperiencesGallery />
 
       {/* Banner de Chamada para Ação (CTA) que abre o formulário */}
       <CTABannerHome onOpenQuote={() => setQuoteOpen(true)} />

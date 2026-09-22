@@ -59,6 +59,7 @@ import { toast } from "sonner";
 import { Link, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useEffect, useRef } from "react";
+import type { Json, Tables } from "@/integrations/supabase/types";
 
 type PaymentMethod = "credit_card" | "debit_card" | "pix";
 
@@ -73,6 +74,37 @@ interface Occupant {
   cpf: string;
   birth_date: string;
   is_infant: boolean;
+}
+
+type CheckoutPackage = Pick<
+  Tables<"packages">,
+  | "id"
+  | "title"
+  | "slug"
+  | "price"
+  | "cover_image_url"
+  | "duration"
+  | "installments"
+  | "category"
+  | "travel_date"
+  | "available_slots"
+  | "status"
+  | "route_info"
+  | "package_details"
+>;
+
+type CheckoutCartItem = Tables<"cart_items"> & { package: CheckoutPackage | null };
+type MenuSelection = { name?: string; price?: number | string };
+type PackageDetail = { label?: string; value?: string };
+type RouteLeg = { from?: string; to?: string; date?: string; time?: string };
+type RouteInfo = { departure?: RouteLeg; return?: RouteLeg };
+
+function menuSelections(value: Json | null) {
+  return Array.isArray(value) ? value as unknown as MenuSelection[] : [];
+}
+
+function menuExtrasTotal(value: Json | null) {
+  return menuSelections(value).reduce((sum, item) => sum + Number(item.price || 0), 0);
 }
 
 // ─── Helpers ───
@@ -172,7 +204,7 @@ const CheckoutPage = () => {
         .eq("user_id", user!.id)
         .single();
       if (error) throw error;
-      return data;
+      return (data || []) as CheckoutCartItem[];
     },
   });
 
@@ -208,7 +240,7 @@ const CheckoutPage = () => {
 
     setOccupantsMap((prev) => {
       const updated = { ...prev };
-      cartItems.forEach((item: any) => {
+      cartItems.forEach((item) => {
         if (!updated[item.id]) {
           // Cria array de ocupantes com base no número de pessoas
           const occupants: Occupant[] = [];
@@ -331,7 +363,7 @@ const CheckoutPage = () => {
 
   // Pega o menor número de parcelas entre todos os itens do carrinho
   const maxInstallments = cartItems.length > 0
-    ? cartItems.reduce((min: number, item: any) => {
+    ? cartItems.reduce((min, item) => {
         const pkg = item.package?.installments || 1;
         return Math.min(min, pkg);
       }, cartItems[0]?.package?.installments || 1)
@@ -339,10 +371,8 @@ const CheckoutPage = () => {
 
   // Calcula total considerando infants (não pagam)
   const calculateTotal = () =>
-    cartItems.reduce((total, item: any) => {
-      const menuExtras = Array.isArray(item.menu_selections)
-        ? (item.menu_selections as any[]).reduce((s: number, m: any) => s + Number(m.price || 0), 0)
-        : 0;
+    cartItems.reduce((total, item) => {
+      const menuExtras = menuExtrasTotal(item.menu_selections);
       const occupants = occupantsMap[item.id] || [];
       const payingCount = occupants.filter((o) => !o.is_infant).length || item.people;
       return total + ((item.package?.price || 0) + menuExtras) * payingCount;
@@ -364,7 +394,7 @@ const CheckoutPage = () => {
   };
 
   // Valida se todos os ocupantes têm dados preenchidos
-  const allOccupantsValid = cartItems.every((item: any) => {
+  const allOccupantsValid = cartItems.every((item) => {
     const occupants = occupantsMap[item.id] || [];
     if (occupants.length === 0) return false;
     return occupants.every((o) => {
@@ -376,12 +406,12 @@ const CheckoutPage = () => {
   });
 
   // Verifica se algum item excede vagas disponíveis
-  const slotsExceeded = cartItems.some((item: any) => {
+  const slotsExceeded = cartItems.some((item) => {
     const slots = item.package?.available_slots;
     const payingCount = getPayingCount(item.id, item.people);
     return slots != null && payingCount > slots;
   });
-  const soldOutItems = cartItems.filter((item: any) => item.package?.status === "esgotado");
+  const soldOutItems = cartItems.filter((item) => item.package?.status === "esgotado");
 
   // Pega clientName e clientCpf do primeiro ocupante do primeiro item
   const getClientNameAndCpf = () => {
@@ -404,10 +434,8 @@ const CheckoutPage = () => {
       if (!session?.access_token) throw new Error("Sessão inválida");
 
       // Monta o payload com cada item, somando extras de cardápio ao preço base
-      const cartPayload = cartItems.map((item: any) => {
-        const menuExtras = Array.isArray(item.menu_selections)
-          ? (item.menu_selections as any[]).reduce((s: number, m: any) => s + Number(m.price || 0), 0)
-          : 0;
+      const cartPayload = cartItems.map((item) => {
+        const menuExtras = menuExtrasTotal(item.menu_selections);
         const occupants = occupantsMap[item.id] || [];
         const payingCount = occupants.filter((o) => !o.is_infant).length || item.people;
         return {
@@ -459,7 +487,7 @@ const CheckoutPage = () => {
         toast.error("URL de pagamento não recebida. Tente novamente.");
       }
     },
-    onError: (err: any) => {
+    onError: (err: Error) => {
       toast.error("Erro ao iniciar pagamento: " + (err.message || "Tente novamente"));
       setIsRedirecting(false);
     },
@@ -626,13 +654,11 @@ const CheckoutPage = () => {
               <div className="lg:col-span-2 space-y-6">
 
                 {/* Lista de itens do pedido com formulário de ocupantes */}
-                {cartItems.map((item: any, itemIndex: number) => {
+                {cartItems.map((item, itemIndex) => {
                   const occupants = occupantsMap[item.id] || [];
                   const payingOccupants = occupants.filter((o) => !o.is_infant);
                   const infantOccupants = occupants.filter((o) => o.is_infant);
-                  const menuExtras = Array.isArray(item.menu_selections)
-                    ? (item.menu_selections as any[]).reduce((s: number, m: any) => s + Number(m.price || 0), 0)
-                    : 0;
+                  const menuExtras = menuExtrasTotal(item.menu_selections);
                   const itemTotal = ((item.package?.price || 0) + menuExtras) * payingOccupants.length;
 
                   return (
@@ -685,7 +711,7 @@ const CheckoutPage = () => {
                                   <UtensilsCrossed size={10} /> Cardápio extra:
                                 </div>
                                 <div className="flex flex-wrap gap-1">
-                                  {(item.menu_selections as any[]).map((m: any, idx: number) => (
+                                  {menuSelections(item.menu_selections).map((m, idx) => (
                                     <span key={idx} className="text-[10px] bg-orange-50 border border-orange-200 text-orange-600 rounded-full px-2 py-0.5">
                                       {m.name}
                                     </span>
@@ -1034,13 +1060,11 @@ const CheckoutPage = () => {
                     <h3 className="font-bold text-lg border-b pb-3 text-primary">Resumo do Pedido</h3>
 
                     <div className="space-y-3">
-                      {cartItems.map((item: any) => {
+                      {cartItems.map((item) => {
                         const occupants = occupantsMap[item.id] || [];
                         const payingCount = occupants.filter((o) => !o.is_infant).length || item.people;
                         const infantCount = occupants.filter((o) => o.is_infant).length;
-                        const menuExtras = Array.isArray(item.menu_selections)
-                          ? (item.menu_selections as any[]).reduce((s: number, m: any) => s + Number(m.price || 0), 0)
-                          : 0;
+                        const menuExtras = menuExtrasTotal(item.menu_selections);
 
                         return (
                           <div key={item.id} className="space-y-1">
@@ -1114,7 +1138,7 @@ const CheckoutPage = () => {
 
                     {soldOutItems.length > 0 && (
                       <p className="text-xs text-center text-red-600 font-medium">
-                        ❌ {soldOutItems.map((i: any) => i.package?.title).join(", ")} está esgotado
+                        ❌ {soldOutItems.map((item) => item.package?.title).join(", ")} está esgotado
                       </p>
                     )}
 
@@ -1131,14 +1155,14 @@ const CheckoutPage = () => {
                 </Card>
 
                 {/* Package Extras (Trajeto & Detalhes) — Compact */}
-                {Array.from(new Set(cartItems.map((item: any) => item.package?.id))).map((packageId: any) => {
-                  const pkg = cartItems.find((item: any) => item.package?.id === packageId)?.package;
+                {Array.from(new Set(cartItems.map((item) => item.package?.id).filter(Boolean))).map((packageId) => {
+                  const pkg = cartItems.find((item) => item.package?.id === packageId)?.package;
                   if (!pkg) return null;
 
-                  const pd = pkg.package_details;
+                  const pd = pkg.package_details as PackageDetail[] | null;
                   const hasDetails = pd && Array.isArray(pd) && pd.length > 0;
                   
-                  const ri = pkg.route_info;
+                  const ri = pkg.route_info as RouteInfo | null;
                   const dep = ri?.departure;
                   const ret = ri?.return;
                   const hasDep = dep && (dep.from || dep.to);
@@ -1201,7 +1225,7 @@ const CheckoutPage = () => {
                               Detalhes
                             </h4>
                             <div className="space-y-1">
-                              {pd.map((item: any, i: number) => (
+                              {pd.map((item, i) => (
                                 <div key={i} className="flex items-baseline gap-2 text-xs">
                                   <span className="text-muted-foreground font-semibold shrink-0">{item.label}:</span>
                                   <span className="text-foreground font-medium leading-snug">{item.value}</span>
@@ -1231,7 +1255,7 @@ const CheckoutPage = () => {
                   </p>
                 </div>
                 <Button asChild size="lg" className="rounded-full px-8 shadow-md">
-                  <Link to="/destinos">Explorar Destinos</Link>
+                  <Link to="/destinos">Explorar Pacotes</Link>
                 </Button>
               </CardContent>
             </Card>

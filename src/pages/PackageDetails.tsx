@@ -1,26 +1,59 @@
-import { useState, useRef, useEffect } from "react";
+import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import {
-  ArrowLeft, Clock, Car, Coffee, Bed, Map, Shield, MessageCircle, Users, Utensils, Compass, Camera, MapPin, Loader2, CreditCard, Heart, Star, UserCircle, ShoppingCart, Calendar, Maximize2, Ticket, Sparkles, ArrowRight, Send, Info, ChevronDown, Hotel, Plane, UtensilsCrossed, CheckCircle2, Plus, Minus, Ban, Luggage, Briefcase
+  ArrowLeft, Clock, Car, Coffee, Bed, Map, Shield, MessageCircle, Users, Compass, Camera, MapPin, Loader2, CreditCard, Heart, Star, UserCircle, ShoppingCart, Calendar, Maximize2, ArrowRight, Info, Plane, UtensilsCrossed, CheckCircle2, Ban, Luggage, Briefcase
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import {
-  Accordion, AccordionContent, AccordionItem, AccordionTrigger,
-} from "@/components/ui/accordion";
 import { Textarea } from "@/components/ui/textarea";
-import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/hooks/useAuth";
 import { useFavorite } from "@/hooks/useFavorite";
 import Navbar from "@/components/Navbar";
 import { toast } from "sonner";
-import QuoteFormDialog from "@/components/QuoteFormDialog";
 import { useSiteSettings } from "@/hooks/useSiteSettings";
 import { getAirlineInfo } from "@/components/AirlineSelect";
+import Footer from "@/components/Footer";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { getFixedPackageSchedule } from "@/lib/packageSchedule";
+import "./package-details.css";
+
+type RouteLeg = Partial<Record<
+  | "airportCodeFrom"
+  | "cityFrom"
+  | "from"
+  | "airportCodeTo"
+  | "cityTo"
+  | "to"
+  | "date"
+  | "departureTime"
+  | "time"
+  | "arrivalTime"
+  | "airline"
+  | "stops"
+  | "duration"
+  | "baggage",
+  string
+>>;
+
+type RouteInfo = {
+  departure?: RouteLeg;
+  return?: RouteLeg;
+};
+
+type PackageDetail = {
+  label?: string;
+  value?: string;
+};
+
+type ItineraryDay = {
+  day_number: number;
+  title: string;
+  description?: string | null;
+};
 
 const fadeUp = {
   hidden: { opacity: 0, y: 24 },
@@ -31,6 +64,8 @@ const fadeUp = {
   }),
 };
 
+const SHOW_LEGACY_FLIGHT_SUMMARY = false;
+
 const inclusionIcons: Record<string, typeof Car> = {
   translado: Car,
   hospedagem: Bed,
@@ -40,6 +75,159 @@ const inclusionIcons: Record<string, typeof Car> = {
   seguro: Shield,
   passeio: Camera,
 };
+
+const getAirport = (leg: RouteLeg | undefined, direction: "From" | "To") =>
+  leg?.[`airportCode${direction}`] || "";
+
+const getCity = (leg: RouteLeg | undefined, direction: "From" | "To") =>
+  leg?.[`city${direction}`] || leg?.[direction === "From" ? "from" : "to"] || "";
+
+const getDepartureTime = (leg: RouteLeg | undefined) =>
+  leg?.departureTime || leg?.time || "";
+
+const formatFlightDate = (dateValue: string) => {
+  if (!dateValue) return "";
+  return new Date(`${dateValue}T12:00:00`).toLocaleDateString("pt-BR", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+};
+
+const formatPackageDate = (dateValue: string, long = false) => {
+  const [year, month, day] = dateValue.substring(0, 10).split("-").map(Number);
+  if (!year || !month || !day) return dateValue;
+
+  return new Date(year, month - 1, day).toLocaleDateString("pt-BR", long
+    ? { day: "2-digit", month: "long", year: "numeric" }
+    : { day: "2-digit", month: "2-digit", year: "numeric" });
+};
+
+function FlightLegSummary({ leg, label, reverse = false }: { leg: RouteLeg; label: string; reverse?: boolean }) {
+  const airportFrom = getAirport(leg, "From");
+  const airportTo = getAirport(leg, "To");
+  const cityFrom = getCity(leg, "From");
+  const cityTo = getCity(leg, "To");
+  const departureTime = getDepartureTime(leg);
+  const arrivalTime = leg.arrivalTime || "";
+  const airline = leg.airline || "";
+  const airlineInfo = airline ? getAirlineInfo(airline) : null;
+  const date = leg.date ? formatFlightDate(leg.date) : "";
+
+  return (
+    <div className="flight-leg">
+      <div className="flight-leg__header">
+        <span><Plane size={13} className={reverse ? "rotate-180" : ""} /> {label}</span>
+        {date && <time>{date}</time>}
+      </div>
+
+      <div className="flight-leg__route">
+        <div className="flight-leg__airport">
+          <strong>{departureTime || "--:--"}</strong>
+          <span>{cityFrom || "Origem"}</span>
+          {airportFrom && <small>{airportFrom}</small>}
+        </div>
+
+        <div className="flight-leg__path" aria-label={leg.stops || "Trecho aéreo"}>
+          <span>{leg.stops || "Trecho aéreo"}</span>
+          <div><i /><Plane size={15} /><i /></div>
+          {leg.duration && <small>{leg.duration}</small>}
+        </div>
+
+        <div className="flight-leg__airport flight-leg__airport--arrival">
+          <strong>{arrivalTime || "--:--"}</strong>
+          <span>{cityTo || "Destino"}</span>
+          {airportTo && <small>{airportTo}</small>}
+        </div>
+      </div>
+
+      {(airline || leg.baggage) && (
+        <div className="flight-leg__footer">
+          {airline && (
+            <span className="flight-leg__airline">
+              <span className="flight-leg__logo">
+                {airlineInfo?.logo
+                  ? <img src={airlineInfo.logo} alt="" />
+                  : <Plane size={13} />}
+              </span>
+              {airline}
+              {airlineInfo?.iata && <small>{airlineInfo.iata}</small>}
+            </span>
+          )}
+          {leg.baggage && <span><Luggage size={14} /> {leg.baggage}</span>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PackageFlightSummary({ routeInfo }: { routeInfo: RouteInfo | null }) {
+  if (!routeInfo || typeof routeInfo !== "object") return null;
+
+  const departure = routeInfo.departure;
+  const returnLeg = routeInfo.return;
+  const hasDeparture = Boolean(departure && (getCity(departure, "From") || getCity(departure, "To") || getAirport(departure, "From")));
+  const hasReturn = Boolean(returnLeg && (getCity(returnLeg, "From") || getCity(returnLeg, "To") || getAirport(returnLeg, "From")));
+  if (!hasDeparture && !hasReturn) return null;
+
+  return (
+    <section className="flight-summary" aria-labelledby="flight-summary-title">
+      <div className="flight-summary__title" id="flight-summary-title">
+        <Plane size={19} />
+        <span>Seu voo</span>
+      </div>
+      <div className="flight-summary__legs">
+        {hasDeparture && departure && <FlightLegSummary leg={departure} label="Ida" />}
+        {hasReturn && returnLeg && <FlightLegSummary leg={returnLeg} label="Volta" reverse />}
+      </div>
+    </section>
+  );
+}
+
+function PackageItinerary({ days, isRegional }: { days: ItineraryDay[]; isRegional: boolean }) {
+  const title = isRegional ? "Expedição dia a dia" : "Roteiro dia a dia";
+
+  return (
+    <motion.section
+      id="roteiro"
+      initial="hidden"
+      whileInView="visible"
+      viewport={{ once: true, amount: 0.12 }}
+      className={`experience-itinerary ${isRegional ? "experience-itinerary--regional" : ""}`}
+      aria-labelledby="experience-itinerary-title"
+    >
+      <motion.div custom={0} variants={fadeUp} className="experience-itinerary__heading">
+        <span className="experience-eyebrow">{isRegional ? "Expedição" : "Seu roteiro"}</span>
+        <h2 id="experience-itinerary-title">{title}</h2>
+        <p>
+          {isRegional
+            ? "Confira como será a programação da experiência, com cada etapa preparada para você aproveitar o destino com tranquilidade."
+            : "Confira cada etapa da viagem, dos primeiros momentos no destino até o retorno para casa."}
+        </p>
+      </motion.div>
+
+      <motion.ol custom={1} variants={fadeUp} className="experience-itinerary__timeline">
+        {days.map((day) => {
+          const dayNumber = String(day.day_number).padStart(2, "0");
+
+          return (
+            <li key={day.day_number} className="experience-itinerary__day">
+              <div className="experience-itinerary__marker" aria-hidden="true">
+                <span>{dayNumber}</span>
+              </div>
+              <div className="experience-itinerary__copy">
+                <span>Dia {dayNumber}</span>
+                <h3>{day.title}</h3>
+                {day.description && <p className="whitespace-pre-wrap">{day.description}</p>}
+              </div>
+            </li>
+          );
+        })}
+      </motion.ol>
+    </motion.section>
+  );
+}
 
 /**
  * PÁGINA DE DETALHES DO PACOTE
@@ -55,14 +243,10 @@ const PackageDetails = () => {
   const queryClient = useQueryClient();
   const { data: siteSettings } = useSiteSettings();
 
-  const [isQuoteOpen, setIsQuoteOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState("roteiro");
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewComment, setReviewComment] = useState("");
   const [selectedMenuItemIds, setSelectedMenuItemIds] = useState<string[]>([]);
-  const [customerTravelDate, setCustomerTravelDate] = useState("");
-  const [customerTravelTime, setCustomerTravelTime] = useState("");
 
   // Busca os dados do pacote pelo slug (usando slugParam pra não confundir o Juan kkk)
   const { data: pkg, isLoading } = useQuery({
@@ -70,8 +254,6 @@ const PackageDetails = () => {
     queryFn: async () => {
       const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(slugParam || "");
 
-      // Busca o pacote SEM join com destinations (destination_id pode ser null)
-      // Pacotes novos usam o campo texto destination_name direto
       let pkgQuery = supabase
         .from("packages")
         .select("*, package_inclusions(inclusion_key, label), package_itinerary_days(day_number, title, description), package_images(image_url, sort_order), available_slots, total_slots");
@@ -88,10 +270,12 @@ const PackageDetails = () => {
     },
   });
 
-  // Busca itens do cardápio — SÓ para pacotes internos (categoria 'interno')
+  const isRegionalPackage = pkg?.package_type === "regional" || pkg?.category === "interno";
+
+  // Busca itens do cardápio somente para experiências regionais.
   const { data: menuItems = [] } = useQuery({
     queryKey: ["package-menu-items", pkg?.id],
-    enabled: !!pkg?.id && pkg?.category === "interno",
+    enabled: Boolean(pkg?.id) && isRegionalPackage,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("package_menu_items")
@@ -146,11 +330,9 @@ const PackageDetails = () => {
         .filter((item) => selectedMenuItemIds.includes(item.id))
         .map((item) => ({ id: item.id, name: item.name, price: item.price }));
 
-      const travelDateToSave = isInternal
-        ? (customerTravelDate && customerTravelTime
-          ? `${customerTravelDate}T${customerTravelTime}:00`
-          : customerTravelDate || null)
-        : (pkg as any).travel_date || null;
+      const travelDateToSave = isRegional
+        ? getFixedPackageSchedule(pkg.travel_date, pkg.travel_time)?.dateTime || null
+        : pkg.travel_date || null;
 
       const { data: existing } = await supabase
         .from("cart_items")
@@ -162,7 +344,7 @@ const PackageDetails = () => {
       if (existing) {
         const { error } = await supabase
           .from("cart_items")
-          .update({ people: existing.people + 1, menu_selections: menuSelections as any, travel_date: travelDateToSave })
+          .update({ people: existing.people + 1, menu_selections: menuSelections, travel_date: travelDateToSave })
           .eq("id", existing.id);
         if (error) throw error;
       } else {
@@ -172,7 +354,7 @@ const PackageDetails = () => {
             user_id: user.id,
             package_id: pkg!.id,
             people: 1,
-            menu_selections: menuSelections as any,
+            menu_selections: menuSelections,
             travel_date: travelDateToSave,
           });
         if (error) throw error;
@@ -181,9 +363,9 @@ const PackageDetails = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["cart-count", user?.id] });
       queryClient.invalidateQueries({ queryKey: ["cart", user?.id] });
-      toast.success("Pacote adicionado ao carrinho!");
+      toast.success(`${isRegional ? "Experiência" : "Pacote"} adicionado ao carrinho!`);
     },
-    onError: (err: any) => {
+    onError: (err: Error) => {
       if (err.message !== "Não logado") {
         toast.error("Erro ao adicionar ao carrinho");
       }
@@ -222,22 +404,34 @@ const PackageDetails = () => {
       <div className="min-h-screen bg-background">
         <Navbar />
         <div className="flex flex-col items-center justify-center py-32">
-          <h1 className="text-2xl font-bold text-primary mb-2">Pacote não encontrado</h1>
+          <h1 className="text-2xl font-bold text-primary mb-2">Produto não encontrado</h1>
           <button onClick={() => navigate(-1)} className="text-accent underline">Voltar</button>
         </div>
       </div>
     );
   }
 
-  const inclusions = (pkg as any).package_inclusions || [];
-  const itinerary = ((pkg as any).package_itinerary_days || []).sort((a: any, b: any) => a.day_number - b.day_number);
-  const images = ((pkg as any).package_images || []).sort((a: any, b: any) => a.sort_order - b.sort_order);
-  const destinationName: string | null = (pkg as any).destination_name || null;
+  const inclusions = pkg.package_inclusions || [];
+  const itinerary = [...(pkg.package_itinerary_days || [])].sort((a, b) => a.day_number - b.day_number);
+  const images = [...(pkg.package_images || [])].sort((a, b) => a.sort_order - b.sort_order);
+  const destinationName: string | null = pkg.destination_name || null;
   const installments = pkg.installments || 10;
-  const isInternal = pkg.category === "interno";
-  const isSoldOut = pkg.status === "esgotado";
-  const availableSlots: number | null = (pkg as any).available_slots ?? null;
-  const totalSlots: number | null = (pkg as any).total_slots ?? null;
+  const isRegional = pkg.package_type === "regional" || pkg.category === "interno";
+  const isExternal = !isRegional;
+  const regionalSchedule = isRegional
+    ? getFixedPackageSchedule(pkg.travel_date, pkg.travel_time)
+    : null;
+  const isSoldOut = pkg.sales_status === "sold_out" || pkg.status === "esgotado";
+  const productLabel = isRegional ? "Experiência regional" : "Pacote externo";
+  const scopeLabel = pkg.category === "cruzeiro"
+    ? "Cruzeiro"
+    : pkg.travel_scope === "international"
+      ? "Internacional"
+      : pkg.travel_scope === "national"
+        ? "Nacional"
+        : null;
+  const availableSlots: number | null = pkg.available_slots ?? null;
+  const totalSlots: number | null = pkg.total_slots ?? null;
 
   // Calcula o total dos extras do cardápio
   const menuExtrasTotal = menuItems
@@ -261,19 +455,19 @@ const PackageDetails = () => {
   const userHasReviewed = reviewsData?.some(r => r.user_id === user?.id);
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="package-experience min-h-screen bg-background">
       <Navbar />
 
       {/* Hero Banner — mt-16/lg:mt-20 empurra o banner para baixo do menu fixo */}
-      <section className="relative h-[40vh] min-h-[350px] overflow-hidden mt-16 lg:mt-20">
-        <motion.img
+      <section className="experience-hero relative overflow-hidden mt-16 lg:mt-20">
+        {pkg.cover_image_url && <motion.img
           src={pkg.cover_image_url || ""}
           alt={pkg.title}
           className="absolute inset-0 w-full h-full object-cover"
           initial={{ scale: 1.1 }}
           animate={{ scale: 1 }}
           transition={{ duration: 1.2, ease: "easeOut" }}
-        />
+        />}
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent" />
 
         <div className="absolute top-6 right-6 z-20">
@@ -282,6 +476,7 @@ const PackageDetails = () => {
             size="icon"
             className="rounded-full bg-white/15 backdrop-blur-sm border border-white/20 text-white hover:bg-white/25 transition-all"
             onClick={() => toggleFavorite()}
+            aria-label={isFavorite ? "Remover dos favoritos" : "Salvar nos favoritos"}
           >
             <Heart
               size={20}
@@ -306,18 +501,29 @@ const PackageDetails = () => {
             <motion.div initial="hidden" animate="visible">
               <motion.div custom={0} variants={fadeUp} className="flex flex-wrap gap-2 mb-3 items-center">
                 <Badge className="bg-evastur-red text-white border-0">
-                  {{ interno: "Regional", nacional: "Nacional", internacional: "Internacional", cruzeiro: "Cruzeiro" }[pkg.category] || pkg.category}
+                  {productLabel}
                 </Badge>
+                {scopeLabel && (
+                  <Badge variant="outline" className="border-white/30 text-white/90 backdrop-blur-sm">
+                    {scopeLabel}
+                  </Badge>
+                )}
                 {pkg.duration && (
                   <Badge variant="outline" className="border-white/30 text-white/90 backdrop-blur-sm">
                     <Clock size={12} className="mr-1" />
                     {pkg.duration}
                   </Badge>
                 )}
-                {(pkg as any).travel_date && (
+                {isExternal && pkg.travel_date && (
                   <Badge variant="outline" className="border-amber-300/60 text-amber-200 backdrop-blur-sm bg-black/20">
                     <Calendar size={12} className="mr-1" />
-                    Saída: {(() => { const [y, m, d] = (pkg as any).travel_date.substring(0, 10).split("-"); return `${d}/${m}/${y}`; })()}
+                    Saída: {formatPackageDate(pkg.travel_date)}
+                  </Badge>
+                )}
+                {regionalSchedule && (
+                  <Badge variant="outline" className="border-amber-300/60 text-amber-200 backdrop-blur-sm bg-black/20">
+                    <Calendar size={12} className="mr-1" />
+                    {formatPackageDate(regionalSchedule.date)} às {regionalSchedule.time}
                   </Badge>
                 )}
                 {isSoldOut && (
@@ -333,12 +539,13 @@ const PackageDetails = () => {
                       {avgRating} <span className="text-white/70 text-xs ml-1">({reviewsData?.length || 0})</span>
                     </>
                   ) : (
-                    <span className="text-white/80 text-xs px-1">Novo ✨</span>
+                    <span className="text-white/80 text-xs px-1">Novo</span>
                   )}
                 </div>
               </motion.div>
 
-              <motion.h1 custom={1} variants={fadeUp} className="text-3xl sm:text-4xl lg:text-5xl font-bold text-white mb-2 text-shadow-hero">
+              <p className="mb-4 text-xs font-semibold uppercase tracking-[0.3em] text-white/75">Evastur · Viagens que ficam em você</p>
+              <motion.h1 custom={1} variants={fadeUp} className="experience-title text-white mb-5 text-shadow-hero">
                 {pkg.title}
               </motion.h1>
 
@@ -353,19 +560,38 @@ const PackageDetails = () => {
         </div>
       </section>
 
+      <div className="experience-facts">
+        <div><Clock size={21} /><span>Duração<strong>{pkg.duration || "Consulte o roteiro"}</strong></span></div>
+        <div><MapPin size={21} /><span>Seu próximo destino<strong>{destinationName || scopeLabel || "Explore com a Evastur"}</strong></span></div>
+        <div><Compass size={21} /><span>Uma viagem do seu jeito<strong>{isRegional ? "Vivência regional" : "Viagem planejada"}</strong></span></div>
+        <div><CreditCard size={21} /><span>Por pessoa, a partir de<strong>{Number(pkg.price).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</strong></span></div>
+      </div>
+      <nav className="experience-navigation" aria-label="Seções do pacote">
+        <a href="#visao-geral">Visão geral</a>
+        {images.length > 0 && <a href="#fotos">Fotografias</a>}
+        {itinerary.length > 0 && <a href="#roteiro">Seu roteiro</a>}
+        {inclusions.length > 0 && <a href="#inclusoes">O que está incluso</a>}
+        <a href="#reserva">Planejar minha viagem <ArrowRight size={14} /></a>
+      </nav>
       {/* Content */}
-      <div className="max-w-7xl mx-auto px-4 lg:px-10 py-10 grid lg:grid-cols-3 gap-10">
+      <div className="experience-content max-w-7xl mx-auto px-5 lg:px-10 py-12 lg:py-20 grid lg:grid-cols-3 gap-10 lg:gap-16">
         {/* Main Content */}
-        <div className="lg:col-span-2 space-y-10">
+        <div id="visao-geral" className="experience-editorial lg:col-span-2 space-y-14">
+          <div className="experience-introduction">
+            <span className="experience-eyebrow">O extraordinário começa aqui</span>
+            <h2>{isRegional ? "Desacelere. Explore. Viva o lugar." : "Uma nova paisagem. Uma nova história."}</h2>
+          </div>
           {/* Overview */}
-          {pkg.short_description && (
+          {(pkg.short_description || pkg.full_description) && (
             <motion.div initial="hidden" whileInView="visible" viewport={{ once: true }} className="space-y-4">
               <motion.h2 custom={0} variants={fadeUp} className="text-2xl font-bold text-primary">
-                Sobre o Pacote
+                {isRegional ? "Sobre a experiência" : "Sobre o pacote"}
               </motion.h2>
-              <motion.p custom={1} variants={fadeUp} className="text-muted-foreground leading-relaxed text-lg">
-                {pkg.short_description}
-              </motion.p>
+              {pkg.short_description && (
+                <motion.p custom={1} variants={fadeUp} className="text-muted-foreground leading-relaxed text-lg">
+                  {pkg.short_description}
+                </motion.p>
+              )}
               {pkg.full_description && (
                 <motion.p custom={2} variants={fadeUp} className="text-muted-foreground leading-relaxed whitespace-pre-wrap">
                   {pkg.full_description}
@@ -374,14 +600,51 @@ const PackageDetails = () => {
             </motion.div>
           )}
 
+          {/* Gallery */}
+          {images.length > 0 && (
+            <motion.div id="fotos" initial="hidden" whileInView="visible" viewport={{ once: true }} className="space-y-4">
+              <span className="experience-eyebrow">Um olhar sobre a viagem</span>
+              <motion.h2 custom={0} variants={fadeUp} className="text-2xl font-bold text-primary">
+                Imagine-se aqui
+              </motion.h2>
+              <motion.div custom={1} variants={fadeUp} className="grid grid-cols-2 gap-3">
+                {images.map((img, i) => (
+                  <button
+                    type="button"
+                    key={img.image_url}
+                    aria-label={`Ampliar fotografia ${i + 1} de ${pkg.title}`}
+                    onClick={() => setSelectedImage(img.image_url)}
+                    className={`group relative rounded-2xl overflow-hidden bg-secondary/30 ${i === 0 ? "col-span-2 aspect-[16/9]" : "aspect-[4/3]"}`}
+                  >
+                    <img loading="lazy" src={img.image_url} alt={`${pkg.title} — fotografia ${i + 1}`} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors duration-300 flex items-center justify-center">
+                      <div className="opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity duration-300 flex flex-col items-center gap-2">
+                        <div className="w-12 h-12 rounded-full bg-white/20 backdrop-blur flex items-center justify-center">
+                          <Maximize2 size={22} className="text-white" />
+                        </div>
+                        <span className="text-white text-xs font-semibold bg-black/50 backdrop-blur-sm px-3 py-1 rounded-full">
+                          Ampliar fotografia
+                        </span>
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </motion.div>
+            </motion.div>
+          )}
+
+          {itinerary.length > 0 && (
+            <PackageItinerary days={itinerary} isRegional={isRegional} />
+          )}
+
           {/* Inclusions */}
           {inclusions.length > 0 && (
-            <motion.div initial="hidden" whileInView="visible" viewport={{ once: true }} className="space-y-4">
+            <motion.div id="inclusoes" initial="hidden" whileInView="visible" viewport={{ once: true }} className="space-y-4">
               <motion.h2 custom={0} variants={fadeUp} className="text-2xl font-bold text-primary">
                 O que está incluso
               </motion.h2>
               <motion.div custom={1} variants={fadeUp} className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                {inclusions.map((inc: any) => {
+                {inclusions.map((inc) => {
                   const IconComp = inclusionIcons[inc.inclusion_key] || Map;
                   return (
                     <Card key={inc.inclusion_key} className="shadow-sm border-0 bg-secondary/30">
@@ -399,7 +662,7 @@ const PackageDetails = () => {
           )}
 
           {/* Menu Items (internal packages only) */}
-          {isInternal && menuItems.length > 0 && (
+          {isRegional && menuItems.length > 0 && (
             <motion.div initial="hidden" whileInView="visible" viewport={{ once: true }} className="space-y-4">
               <motion.div custom={0} variants={fadeUp} className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-xl bg-orange-100 flex items-center justify-center">
@@ -411,7 +674,7 @@ const PackageDetails = () => {
                 </div>
               </motion.div>
               <motion.div custom={1} variants={fadeUp} className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {menuItems.map((item: any) => {
+                {menuItems.map((item) => {
                   const isSelected = selectedMenuItemIds.includes(item.id);
                   return (
                     <button
@@ -464,73 +727,6 @@ const PackageDetails = () => {
             </motion.div>
           )}
 
-          {/* Itinerary */}
-          {itinerary.length > 0 && (
-            <motion.div initial="hidden" whileInView="visible" viewport={{ once: true }} className="space-y-4">
-              <motion.h2 custom={0} variants={fadeUp} className="text-2xl font-bold text-primary">
-                Roteiro Dia a Dia
-              </motion.h2>
-              <motion.div custom={1} variants={fadeUp}>
-                <Accordion type="single" collapsible defaultValue="day-0">
-                  {itinerary.map((day: any, i: number) => (
-                    <AccordionItem key={day.day_number} value={`day-${i}`} className="border-0 bg-secondary/20 rounded-xl mb-3 px-0 overflow-hidden">
-                      <AccordionTrigger className="px-5 py-4 hover:no-underline hover:bg-secondary/40 transition-colors">
-                        <div className="flex items-center gap-3 text-left">
-                          <span className="w-8 h-8 rounded-lg bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold flex-shrink-0">
-                            {day.day_number}
-                          </span>
-                          <span className="font-semibold text-foreground">{day.title}</span>
-                        </div>
-                      </AccordionTrigger>
-                      <AccordionContent className="px-5 pb-5 text-muted-foreground leading-relaxed pt-2">
-                        {day.description}
-                      </AccordionContent>
-                    </AccordionItem>
-                  ))}
-                </Accordion>
-              </motion.div>
-            </motion.div>
-          )}
-
-          {/* Gallery */}
-          {images.length > 0 && (
-            <motion.div initial="hidden" whileInView="visible" viewport={{ once: true }} className="space-y-4">
-              <motion.h2 custom={0} variants={fadeUp} className="text-2xl font-bold text-primary">
-                Galeria
-              </motion.h2>
-              <motion.div custom={1} variants={fadeUp} className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                {images.map((img: any, i: number) => (
-                  <a
-                    key={img.image_url}
-                    href={(() => {
-                      const phone = siteSettings?.agencyWhatsapp?.replace(/\D/g, "") || "5568999872973";
-                      const link = `${window.location.origin}/pacote/${pkg.slug}`;
-                      const msg = encodeURIComponent(
-                        `Olá! 😊 Vi o pacote *${pkg.title}* no site da Evastur e gostaria de mais informações.\n\n🔗 ${link}\n\nPode me ajudar?`
-                      );
-                      return `https://wa.me/${phone}?text=${msg}`;
-                    })()}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className={`group relative rounded-xl overflow-hidden cursor-pointer bg-secondary/30 ${i === 0 ? "md:col-span-2 md:row-span-2" : ""}`}
-                  >
-                    <img src={img.image_url} alt={`Gallery ${i + 1}`} className="w-full h-auto object-contain transition-transform duration-500 group-hover:scale-105" />
-                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors duration-300 flex items-center justify-center">
-                      <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col items-center gap-2">
-                        <div className="w-12 h-12 rounded-full bg-emerald-500 flex items-center justify-center shadow-lg">
-                          <MessageCircle size={22} className="text-white" />
-                        </div>
-                        <span className="text-white text-xs font-semibold bg-black/50 backdrop-blur-sm px-3 py-1 rounded-full">
-                          Falar no WhatsApp
-                        </span>
-                      </div>
-                    </div>
-                  </a>
-                ))}
-              </motion.div>
-            </motion.div>
-          )}
-
           {/* Reviews Section */}
           <motion.div initial="hidden" whileInView="visible" viewport={{ once: true }} className="space-y-6 pt-8 border-t">
             <motion.h2 custom={0} variants={fadeUp} className="text-2xl font-bold text-primary mb-2 flex items-center gap-2">
@@ -543,7 +739,7 @@ const PackageDetails = () => {
                 <Card className="border-primary/20 bg-primary/5 shadow-sm">
                   <CardHeader>
                     <CardTitle className="text-lg">Avalie sua experiência</CardTitle>
-                    <CardDescription>Compartilhe o que achou desta viagem com outros clientes.</CardDescription>
+                    <CardDescription>Compartilhe o que achou {isRegional ? "desta experiência" : "desta viagem"} com outros clientes.</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div className="flex items-center gap-2">
@@ -604,7 +800,9 @@ const PackageDetails = () => {
                   </div>
                 ))
               ) : (
-                <p className="text-muted-foreground text-center py-6 bg-secondary/10 rounded-xl border border-dashed">Ainda não há avaliações para este pacote. Seja o primeiro a avaliar após viajar!</p>
+                <p className="text-muted-foreground text-center py-6 bg-secondary/10 rounded-xl border border-dashed">
+                  Ainda não há avaliações para {isRegional ? "esta experiência" : "este pacote"}.
+                </p>
               )}
             </motion.div>
 
@@ -612,10 +810,11 @@ const PackageDetails = () => {
         </div>
 
         {/* Sidebar - Pricing */}
-        <div className="lg:col-span-1">
-          <div className="sticky top-24">
-            <Card className="shadow-xl border-primary/10 bg-white">
+        <div id="reserva" className="lg:col-span-1">
+          <div className="lg:sticky lg:top-36">
+            <Card className="experience-booking border-primary/10 bg-white">
               <CardContent className="p-6 space-y-5">
+                <div className="experience-booking-heading"><span className="experience-eyebrow">Sua próxima história</span><h2>Vamos viver essa viagem?</h2><p>Confira os detalhes e reserve com a Evastur.</p></div>
                 <div>
                   <span className="text-sm font-medium text-muted-foreground uppercase tracking-wider">A partir de</span>
                   <div className="flex items-baseline gap-2 mt-2">
@@ -627,7 +826,7 @@ const PackageDetails = () => {
                   {menuExtrasTotal > 0 && (
                     <div className="mt-2 space-y-1">
                       <div className="flex justify-between text-xs text-muted-foreground">
-                        <span>Pacote base</span>
+                        <span>{isRegional ? "Experiência base" : "Pacote base"}</span>
                         <span>R$ {Number(pkg.price).toLocaleString("pt-BR")}</span>
                       </div>
                       <div className="flex justify-between text-xs text-orange-600 font-medium">
@@ -669,8 +868,8 @@ const PackageDetails = () => {
                       <Ban size={20} className="text-red-600" />
                     </div>
                     <div>
-                      <p className="text-sm font-bold text-red-700">Pacote Esgotado</p>
-                      <p className="text-xs text-red-600/80">Este pacote não está mais disponível para reserva.</p>
+                      <p className="text-sm font-bold text-red-700">{productLabel} esgotado</p>
+                      <p className="text-xs text-red-600/80">Este produto não está mais disponível para reserva.</p>
                     </div>
                   </div>
                 )}
@@ -683,68 +882,41 @@ const PackageDetails = () => {
                 )}
 
                 {/* For non-internal packages: show admin-defined travel date */}
-                {!isInternal && (pkg as any).travel_date && (
+                {isExternal && pkg.travel_date && (
                   <div className="flex items-center gap-2 text-sm py-2 border-b">
                     <Calendar size={16} className="text-amber-500" />
                     <span className="font-medium text-amber-700">Data da Viagem:</span>
                     <span className="font-semibold text-amber-600">
-                      {(() => { const [y, m, d] = (pkg as any).travel_date.substring(0, 10).split("-"); return new Date(Number(y), Number(m) - 1, Number(d)).toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" }); })()}
+                      {formatPackageDate(pkg.travel_date, true)}
                     </span>
                   </div>
                 )}
 
-                {/* For internal packages: customer picks travel date + time */}
-                {isInternal && (
-                  <div className="space-y-3 py-2 border-b">
-                    <label className="flex items-center gap-2 text-sm font-semibold text-foreground">
-                      <Calendar size={15} className="text-primary" />
-                      Data e horário do passeio <span className="text-red-500">*</span>
-                    </label>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="space-y-1">
-                        <p className="text-xs text-muted-foreground font-medium">Data</p>
-                        <input
-                          type="date"
-                          value={customerTravelDate}
-                          onChange={(e) => setCustomerTravelDate(e.target.value)}
-                          min={new Date().toISOString().split("T")[0]}
-                          className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <p className="text-xs text-muted-foreground font-medium">Horário</p>
-                        <input
-                          type="time"
-                          value={customerTravelTime}
-                          onChange={(e) => setCustomerTravelTime(e.target.value)}
-                          className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
-                        />
-                      </div>
+                {regionalSchedule && (
+                  <div className="flex items-start gap-3 py-3 border-b">
+                    <Calendar size={17} className="mt-0.5 shrink-0 text-amber-600" />
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Data e horário</p>
+                      <p className="mt-1 text-sm font-semibold text-foreground">
+                        {formatPackageDate(regionalSchedule.date, true)} às {regionalSchedule.time}
+                      </p>
                     </div>
-                    {(!customerTravelDate || !customerTravelTime) && (
-                      <p className="text-xs text-muted-foreground">
-                        Selecione a data e o horário desejados para o passeio
-                      </p>
-                    )}
-                    {customerTravelDate && customerTravelTime && (
-                      <p className="text-xs text-emerald-600 font-medium flex items-center gap-1">
-                        ✅ {new Date(`${customerTravelDate}T${customerTravelTime}`).toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long", year: "numeric" })} às {customerTravelTime}h
-                      </p>
-                    )}
                   </div>
                 )}
 
-                {/* Route Info — Informações de Voo (Estilo Decolar) */}
-                {(() => {
-                  const ri = (pkg as any).route_info;
+                <PackageFlightSummary routeInfo={isExternal ? (pkg.route_info as RouteInfo | null) : null} />
+
+                {/* Mantido temporariamente para compatibilidade enquanto o novo resumo de voo é validado. */}
+                {SHOW_LEGACY_FLIGHT_SUMMARY && (() => {
+                  const ri = pkg.route_info as RouteInfo | null;
                   if (!ri || typeof ri !== "object") return null;
                   const dep = ri.departure;
                   const ret = ri.return;
                   // Retrocompat: suporta dados antigos (from/to) e novos (cityFrom/cityTo/airportCodeFrom/airportCodeTo)
-                  const getAirport = (leg: any, dir: "From" | "To") => leg?.[`airportCode${dir}`] || "";
-                  const getCity = (leg: any, dir: "From" | "To") => leg?.[`city${dir}`] || leg?.[dir === "From" ? "from" : "to"] || "";
-                  const getDepTime = (leg: any) => leg?.departureTime || leg?.time || "";
-                  const getArrTime = (leg: any) => leg?.arrivalTime || "";
+                  const getAirport = (leg: RouteLeg | undefined, dir: "From" | "To") => leg?.[`airportCode${dir}`] || "";
+                  const getCity = (leg: RouteLeg | undefined, dir: "From" | "To") => leg?.[`city${dir}`] || leg?.[dir === "From" ? "from" : "to"] || "";
+                  const getDepTime = (leg: RouteLeg | undefined) => leg?.departureTime || leg?.time || "";
+                  const getArrTime = (leg: RouteLeg | undefined) => leg?.arrivalTime || "";
 
                   const hasDep = dep && (getCity(dep, "From") || getCity(dep, "To") || getAirport(dep, "From"));
                   const hasRet = ret && (getCity(ret, "From") || getCity(ret, "To") || getAirport(ret, "From"));
@@ -756,7 +928,7 @@ const PackageDetails = () => {
                     return date.toLocaleDateString("pt-BR", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
                   };
 
-                  const FlightLeg = ({ leg, label, color }: { leg: any; label: string; color: "indigo" | "emerald" }) => {
+                  const FlightLeg = ({ leg, label, color }: { leg: RouteLeg; label: string; color: "indigo" | "emerald" }) => {
                     const airFrom = getAirport(leg, "From");
                     const airTo = getAirport(leg, "To");
                     const cityFrom = getCity(leg, "From");
@@ -944,7 +1116,7 @@ const PackageDetails = () => {
                       size="lg"
                       onClick={() => {
                         const phone = siteSettings?.agencyWhatsapp?.replace(/\D/g, "") || "5568999872973";
-                        const msg = encodeURIComponent(`Olá! Vi no site que o pacote *${pkg.title}* está esgotado. Gostaria de saber se há previsão de novas vagas ou pacotes similares. Obrigado!`);
+                        const msg = encodeURIComponent(`Olá! Vi no site que ${isRegional ? "a experiência" : "o pacote"} *${pkg.title}* está esgotado. Gostaria de saber se há previsão de novas vagas ou opções similares. Obrigado!`);
                         window.open(`https://wa.me/${phone}?text=${msg}`, "_blank");
                       }}
                     >
@@ -962,22 +1134,18 @@ const PackageDetails = () => {
                           navigate(`/login?redirect=/pacote/${slugParam}`);
                           return;
                         }
-                        if (isInternal && (!customerTravelDate || !customerTravelTime)) {
-                          toast.error("Por favor, selecione a data e o horário do passeio antes de reservar.");
-                          return;
-                        }
                         // Adiciona ao carrinho e vai direto pro checkout
                         await addToCart.mutateAsync();
                         navigate("/checkout");
                       }}
-                      disabled={addToCart.isPending || (isInternal && (!customerTravelDate || !customerTravelTime))}
+                      disabled={addToCart.isPending}
                     >
                       {addToCart.isPending ? (
                         <Loader2 size={20} className="animate-spin" />
                       ) : (
                         <>
                           <CreditCard size={20} />
-                          Reservar Agora
+                          {isRegional ? "Reservar experiência" : "Reservar pacote"}
                         </>
                       )}
                     </Button>
@@ -994,7 +1162,7 @@ const PackageDetails = () => {
                       ) : (
                         <ShoppingCart size={20} />
                       )}
-                      Adicionar ao Carrinho
+                      {isRegional ? "Adicionar experiência ao carrinho" : "Adicionar pacote ao carrinho"}
                     </Button>
                   </>
                 )}
@@ -1007,7 +1175,7 @@ const PackageDetails = () => {
 
             {/* Package Details — Detalhes do Pacote */}
             {(() => {
-              const pd = (pkg as any).package_details;
+              const pd = pkg.package_details as PackageDetail[] | null;
               if (!pd || !Array.isArray(pd) || pd.length === 0) return null;
 
               return (
@@ -1017,7 +1185,7 @@ const PackageDetails = () => {
                     Detalhes Importantes
                   </h3>
                   <div className="space-y-3">
-                    {pd.map((item: any, i: number) => (
+                    {pd.map((item, i) => (
                       <div key={i} className="flex flex-col gap-0.5">
                         <span className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wider">{item.label}</span>
                         <span className="text-sm text-foreground font-medium leading-tight">{item.value}</span>
@@ -1031,6 +1199,26 @@ const PackageDetails = () => {
           </div>
         </div>
       </div>
+      <section className="experience-closing">
+        <Compass size={32} strokeWidth={1} />
+        <p>O próximo capítulo começa com uma viagem.</p>
+        <a href="#reserva">Encontre seu lugar no mundo <ArrowRight size={16} /></a>
+      </section>
+      <Footer />
+      <div className="experience-mobile-reserve lg:hidden">
+        <div><span>{isSoldOut ? "Vagas esgotadas" : "Sua viagem, por pessoa"}</span><strong>{totalWithExtras.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</strong></div>
+        <a href="#reserva">{isSoldOut ? "Consultar opções" : "Ver reserva"}<ArrowRight size={16} /></a>
+      </div>
+      <Dialog open={Boolean(selectedImage)} onOpenChange={(open) => { if (!open) setSelectedImage(null); }}>
+        <DialogContent className="max-w-5xl border-0 bg-slate-950 p-3 text-white">
+          <DialogTitle className="pr-8 text-sm">{pkg.title} · Fotografias</DialogTitle>
+          <DialogDescription className="sr-only">Imagem ampliada da viagem. Use Escape para fechar.</DialogDescription>
+          {selectedImage && <img src={selectedImage} alt={`Fotografia de ${pkg.title}`} className="max-h-[75vh] w-full object-contain" />}
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {images.map((image, index) => <button key={image.image_url} aria-label={`Ver fotografia ${index + 1}`} aria-pressed={selectedImage === image.image_url} onClick={() => setSelectedImage(image.image_url)} className="shrink-0 rounded border-2 border-transparent focus-visible:border-white aria-pressed:border-white"><img src={image.image_url} alt="" className="h-14 w-20 rounded object-cover" /></button>)}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

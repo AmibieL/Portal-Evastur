@@ -1,4 +1,4 @@
-import { Sparkles, ArrowRight, Compass } from "lucide-react";
+import { ArrowRight, Compass, MessageCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import QuoteFormDialog from "./QuoteFormDialog";
@@ -23,7 +23,7 @@ const HeroSection = () => {
           <div className="max-w-2xl lg:max-w-3xl space-y-4 lg:space-y-6">
             {/* Badge */}
             <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm px-3 py-1.5 lg:px-4 lg:py-2 rounded-full text-white/90">
-              <Sparkles size={14} className="text-amber-400" />
+              <Compass size={14} className="text-amber-400" />
               <span className="text-xs lg:text-sm font-medium uppercase tracking-wider">
                 Experiências Evastur
               </span>
@@ -58,7 +58,7 @@ const HeroSection = () => {
                 className="border-white/50 text-white hover:bg-white/10 hover:border-white font-medium px-6 py-5 lg:px-8 lg:py-6 text-sm lg:text-base gap-2 bg-transparent"
                 onClick={() => setQuoteOpen(true)}
               >
-                <Sparkles size={16} />
+                <MessageCircle size={16} />
                 Solicitar Orçamento
               </Button>
             </div>

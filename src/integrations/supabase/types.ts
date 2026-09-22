@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.4"
+    PostgrestVersion: "14.5"
   }
   public: {
     Tables: {
@@ -93,25 +93,34 @@ export type Database = {
       }
       destination_gallery: {
         Row: {
+          alt_text: string | null
+          caption: string | null
           created_at: string
           destination_id: string
           id: string
           image_url: string
           sort_order: number
+          storage_path: string | null
         }
         Insert: {
+          alt_text?: string | null
+          caption?: string | null
           created_at?: string
           destination_id: string
           id?: string
           image_url: string
           sort_order?: number
+          storage_path?: string | null
         }
         Update: {
+          alt_text?: string | null
+          caption?: string | null
           created_at?: string
           destination_id?: string
           id?: string
           image_url?: string
           sort_order?: number
+          storage_path?: string | null
         }
         Relationships: [
           {
@@ -123,38 +132,144 @@ export type Database = {
           },
         ]
       }
+      destination_highlights: {
+        Row: {
+          created_at: string
+          description: string | null
+          destination_id: string
+          icon: string | null
+          id: string
+          sort_order: number
+          title: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          destination_id: string
+          icon?: string | null
+          id?: string
+          sort_order?: number
+          title: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          destination_id?: string
+          icon?: string | null
+          id?: string
+          sort_order?: number
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "destination_highlights_destination_id_fkey"
+            columns: ["destination_id"]
+            isOneToOne: false
+            referencedRelation: "destinations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      destination_itinerary_days: {
+        Row: {
+          created_at: string
+          day_number: number
+          description: string | null
+          destination_id: string
+          id: string
+          title: string
+        }
+        Insert: {
+          created_at?: string
+          day_number: number
+          description?: string | null
+          destination_id: string
+          id?: string
+          title: string
+        }
+        Update: {
+          created_at?: string
+          day_number?: number
+          description?: string | null
+          destination_id?: string
+          id?: string
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "destination_itinerary_days_destination_id_fkey"
+            columns: ["destination_id"]
+            isOneToOne: false
+            referencedRelation: "destinations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       destinations: {
         Row: {
+          access_info: string | null
           active: boolean
+          city: string | null
+          country: string | null
+          cover_image_path: string | null
           cover_image_url: string | null
           created_at: string
           description: string | null
           id: string
           name: string
+          publication_status: string
+          recommendations: string | null
+          region_type: string | null
+          seo_description: string | null
+          seo_title: string | null
           slug: string
+          state: string | null
           subtitle: string | null
+          summary: string | null
           updated_at: string
         }
         Insert: {
+          access_info?: string | null
           active?: boolean
+          city?: string | null
+          country?: string | null
+          cover_image_path?: string | null
           cover_image_url?: string | null
           created_at?: string
           description?: string | null
           id?: string
           name: string
+          publication_status?: string
+          recommendations?: string | null
+          region_type?: string | null
+          seo_description?: string | null
+          seo_title?: string | null
           slug: string
+          state?: string | null
           subtitle?: string | null
+          summary?: string | null
           updated_at?: string
         }
         Update: {
+          access_info?: string | null
           active?: boolean
+          city?: string | null
+          country?: string | null
+          cover_image_path?: string | null
           cover_image_url?: string | null
           created_at?: string
           description?: string | null
           id?: string
           name?: string
+          publication_status?: string
+          recommendations?: string | null
+          region_type?: string | null
+          seo_description?: string | null
+          seo_title?: string | null
           slug?: string
+          state?: string | null
           subtitle?: string | null
+          summary?: string | null
           updated_at?: string
         }
         Relationships: []
@@ -249,27 +364,78 @@ export type Database = {
         }
         Relationships: []
       }
-      package_images: {
+      package_destinations: {
         Row: {
           created_at: string
+          destination_id: string
           id: string
-          image_url: string
+          is_primary: boolean
           package_id: string
           sort_order: number
         }
         Insert: {
           created_at?: string
+          destination_id: string
           id?: string
-          image_url: string
+          is_primary?: boolean
           package_id: string
           sort_order?: number
         }
         Update: {
           created_at?: string
+          destination_id?: string
+          id?: string
+          is_primary?: boolean
+          package_id?: string
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "package_destinations_destination_id_fkey"
+            columns: ["destination_id"]
+            isOneToOne: false
+            referencedRelation: "destinations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "package_destinations_package_id_fkey"
+            columns: ["package_id"]
+            isOneToOne: false
+            referencedRelation: "packages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      package_images: {
+        Row: {
+          alt_text: string | null
+          caption: string | null
+          created_at: string
+          id: string
+          image_url: string
+          package_id: string
+          sort_order: number
+          storage_path: string | null
+        }
+        Insert: {
+          alt_text?: string | null
+          caption?: string | null
+          created_at?: string
+          id?: string
+          image_url: string
+          package_id: string
+          sort_order?: number
+          storage_path?: string | null
+        }
+        Update: {
+          alt_text?: string | null
+          caption?: string | null
+          created_at?: string
           id?: string
           image_url?: string
           package_id?: string
           sort_order?: number
+          storage_path?: string | null
         }
         Relationships: [
           {
@@ -383,7 +549,9 @@ export type Database = {
       packages: {
         Row: {
           active: boolean
+          available_slots: number | null
           category: string
+          cover_image_path: string | null
           cover_image_url: string | null
           created_at: string
           destination_id: string | null
@@ -393,18 +561,26 @@ export type Database = {
           id: string
           installments: number | null
           package_details: Json | null
+          package_type: string
           price: number
+          publication_status: string
           route_info: Json | null
+          sales_status: string
           short_description: string | null
           slug: string
           status: string
           title: string
+          total_slots: number | null
           travel_date: string | null
+          travel_time: string | null
+          travel_scope: string | null
           updated_at: string
         }
         Insert: {
           active?: boolean
+          available_slots?: number | null
           category?: string
+          cover_image_path?: string | null
           cover_image_url?: string | null
           created_at?: string
           destination_id?: string | null
@@ -414,18 +590,26 @@ export type Database = {
           id?: string
           installments?: number | null
           package_details?: Json | null
+          package_type?: string
           price?: number
+          publication_status?: string
           route_info?: Json | null
+          sales_status?: string
           short_description?: string | null
           slug: string
           status?: string
           title: string
+          total_slots?: number | null
           travel_date?: string | null
+          travel_time?: string | null
+          travel_scope?: string | null
           updated_at?: string
         }
         Update: {
           active?: boolean
+          available_slots?: number | null
           category?: string
+          cover_image_path?: string | null
           cover_image_url?: string | null
           created_at?: string
           destination_id?: string | null
@@ -435,13 +619,19 @@ export type Database = {
           id?: string
           installments?: number | null
           package_details?: Json | null
+          package_type?: string
           price?: number
+          publication_status?: string
           route_info?: Json | null
+          sales_status?: string
           short_description?: string | null
           slug?: string
           status?: string
           title?: string
+          total_slots?: number | null
           travel_date?: string | null
+          travel_time?: string | null
+          travel_scope?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -458,6 +648,7 @@ export type Database = {
         Row: {
           address: string | null
           age: string | null
+          asaas_customer_id: string | null
           avatar_url: string | null
           city: string | null
           cpf: string | null
@@ -466,7 +657,6 @@ export type Database = {
           id: string
           role: string
           state: string | null
-          asaas_customer_id: string | null
           updated_at: string
           user_id: string
           whatsapp: string | null
@@ -474,6 +664,7 @@ export type Database = {
         Insert: {
           address?: string | null
           age?: string | null
+          asaas_customer_id?: string | null
           avatar_url?: string | null
           city?: string | null
           cpf?: string | null
@@ -482,7 +673,6 @@ export type Database = {
           id?: string
           role?: string
           state?: string | null
-          asaas_customer_id?: string | null
           updated_at?: string
           user_id: string
           whatsapp?: string | null
@@ -490,6 +680,7 @@ export type Database = {
         Update: {
           address?: string | null
           age?: string | null
+          asaas_customer_id?: string | null
           avatar_url?: string | null
           city?: string | null
           cpf?: string | null
@@ -498,7 +689,6 @@ export type Database = {
           id?: string
           role?: string
           state?: string | null
-          asaas_customer_id?: string | null
           updated_at?: string
           user_id?: string
           whatsapp?: string | null
@@ -507,6 +697,7 @@ export type Database = {
       }
       reservations: {
         Row: {
+          asaas_payment_id: string | null
           client_city: string | null
           client_email: string | null
           client_name: string
@@ -522,13 +713,13 @@ export type Database = {
           payment_status: string
           people: number
           status: string
-          asaas_payment_id: string | null
           total_price: number
           travel_date: string | null
           updated_at: string
           user_id: string | null
         }
         Insert: {
+          asaas_payment_id?: string | null
           client_city?: string | null
           client_email?: string | null
           client_name: string
@@ -544,13 +735,13 @@ export type Database = {
           payment_status?: string
           people?: number
           status?: string
-          asaas_payment_id?: string | null
           total_price?: number
           travel_date?: string | null
           updated_at?: string
           user_id?: string | null
         }
         Update: {
+          asaas_payment_id?: string | null
           client_city?: string | null
           client_email?: string | null
           client_name?: string
@@ -566,7 +757,6 @@ export type Database = {
           payment_status?: string
           people?: number
           status?: string
-          asaas_payment_id?: string | null
           total_price?: number
           travel_date?: string | null
           updated_at?: string
@@ -648,6 +838,7 @@ export type Database = {
       transactions: {
         Row: {
           amount: number
+          asaas_payment_id: string | null
           client_email: string | null
           client_name: string
           created_at: string
@@ -658,10 +849,10 @@ export type Database = {
           payment_method: string | null
           reservation_id: string | null
           status: string
-          asaas_payment_id: string | null
         }
         Insert: {
           amount: number
+          asaas_payment_id?: string | null
           client_email?: string | null
           client_name: string
           created_at?: string
@@ -672,10 +863,10 @@ export type Database = {
           payment_method?: string | null
           reservation_id?: string | null
           status?: string
-          asaas_payment_id?: string | null
         }
         Update: {
           amount?: number
+          asaas_payment_id?: string | null
           client_email?: string | null
           client_name?: string
           created_at?: string
@@ -686,7 +877,6 @@ export type Database = {
           payment_method?: string | null
           reservation_id?: string | null
           status?: string
-          asaas_payment_id?: string | null
         }
         Relationships: [
           {
@@ -804,7 +994,18 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      save_package_catalog: {
+        Args: {
+          p_destinations: Json
+          p_images: Json
+          p_inclusions: Json
+          p_itinerary: Json
+          p_menu_items: Json
+          p_package: Json
+          p_travel_time?: string | null
+        }
+        Returns: string
+      }
     }
     Enums: {
       [_ in never]: never
@@ -823,12 +1024,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -852,11 +1053,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -877,11 +1078,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -902,11 +1103,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -919,11 +1120,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -937,4 +1138,3 @@ export const Constants = {
     Enums: {},
   },
 } as const
-

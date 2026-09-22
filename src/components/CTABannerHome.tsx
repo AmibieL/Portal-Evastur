@@ -1,4 +1,4 @@
-import { Sparkles } from "lucide-react";
+import { MessageCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface CTABannerHomeProps {
@@ -20,7 +20,7 @@ const CTABannerHome = ({ onOpenQuote }: CTABannerHomeProps) => {
           className="bg-accent hover:bg-accent/90 text-accent-foreground font-semibold px-8 py-6 text-base gap-2"
           onClick={onOpenQuote}
         >
-          <Sparkles size={18} />
+          <MessageCircle size={18} />
           Solicitar Orçamento
         </Button>
       </div>

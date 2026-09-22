@@ -14,22 +14,23 @@
  *
  * IMPORTANTES:
  * - Slug é gerado automaticamente do título (pode editar manualmente)
- * - Data da viagem só aparece para pacotes NÃO internos (nac/inter/cruzeiro)
+ * - Experiências regionais podem ter data e horário fixos, ambos opcionais
  * - Ao criar, oferece enviar newsletter para assinantes
- * - Todas as sub-tabelas (inclusions, itinerary, images, menu_items)
- *   são sincronizadas via delete + insert (padrão sync)
+ * - O pacote e todas as sub-tabelas são sincronizados atomicamente pela RPC
+ *   save_package_catalog; qualquer falha reverte a operação completa
  *
  * TABELAS ENVOLVIDAS:
  * packages, package_inclusions, package_itinerary_days,
  * package_images, package_menu_items
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import type { Database, Json } from "@/integrations/supabase/types";
 import {
   ArrowLeft, Plus, Trash2, Loader2, Send, Package,
-  Image, FileText, CheckSquare, Map, Info, UtensilsCrossed, Users, Plane, ClipboardList, Luggage,
+  Info, UtensilsCrossed, Plane, Luggage, CalendarClock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -39,9 +40,26 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { ToastAction } from "@/components/ui/toast";
 import { Link } from "react-router-dom";
-import { ImageUpload, MultiImageUpload } from "@/components/ImageUpload";
+import { getStoragePathFromPublicUrl, removeStorageImages } from "@/lib/storageImages";
+import {
+  getPrimaryDestinationId,
+  resolvePackageDestinationName,
+  type DestinationNameRelation,
+} from "@/lib/catalog";
 import AirlineSelect, { getAirlineInfo } from "@/components/AirlineSelect";
+import { CapacityFields } from "@/components/admin/packages/ProductSharedFields";
+import {
+  ProductDescriptionSection,
+  ProductDetailsSection,
+  ProductFormSection,
+  ProductInclusionsSection,
+  ProductItinerarySection,
+  ProductMediaSection,
+  type ItineraryDayDraft,
+  type PackageDetailDraft,
+} from "@/components/admin/packages/ProductContentSections";
 
 
 function slugify(text: string) {
@@ -53,12 +71,6 @@ function slugify(text: string) {
     .replace(/(^-|-$)/g, "");
 }
 
-interface ItineraryDay {
-  id: string;
-  title: string;
-  description: string;
-}
-
 interface MenuItemDraft {
   id: string;
   name: string;
@@ -66,11 +78,34 @@ interface MenuItemDraft {
   price: string;
 }
 
-interface PackageDetailItem {
-  id: string;
-  label: string;
-  value: string;
-}
+type StoredRouteLeg = Partial<Record<
+  | "airportCodeFrom"
+  | "cityFrom"
+  | "from"
+  | "airportCodeTo"
+  | "cityTo"
+  | "to"
+  | "date"
+  | "departureTime"
+  | "time"
+  | "arrivalTime"
+  | "airline"
+  | "stops"
+  | "duration"
+  | "baggage",
+  string
+>>;
+
+type StoredRouteInfo = {
+  departure?: StoredRouteLeg;
+  return?: StoredRouteLeg;
+};
+
+type StoredPackageDetail = {
+  id?: string;
+  label?: string;
+  value?: string;
+};
 
 const inclusionOptions = [
   { key: "translado", label: "Translado", emoji: "🚌" },
@@ -82,93 +117,225 @@ const inclusionOptions = [
   { key: "passeio", label: "Passeios", emoji: "🚤" },
 ];
 
-function SectionCard({
-  icon: Icon,
-  title,
-  description,
-  children,
-  color = "text-primary",
-  iconBg = "bg-primary/10",
-}: {
-  icon: any;
-  title: string;
-  description?: string;
-  children: React.ReactNode;
-  color?: string;
-  iconBg?: string;
-}) {
-  return (
-    <div className="bg-card rounded-2xl border border-border shadow-sm overflow-hidden">
-      <div className="flex items-start gap-4 px-6 pt-5 pb-4 border-b border-border/50">
-        <div className={`w-9 h-9 ${iconBg} rounded-xl flex items-center justify-center shrink-0`}>
-          <Icon size={18} className={color} />
-        </div>
-        <div>
-          <h3 className="font-semibold text-foreground text-base">{title}</h3>
-          {description && (
-            <p className="text-muted-foreground text-xs mt-0.5">{description}</p>
-          )}
-        </div>
-      </div>
-      <div className="px-6 py-5">{children}</div>
-    </div>
-  );
+type PackageType = "external" | "regional";
+
+type PackageCreationDraft = {
+  version: 2;
+  packageAssetId: string;
+  general: {
+    title: string;
+    slug: string;
+    slugManual: boolean;
+    destinationName: string;
+    category: string;
+    duration: string;
+    price: string;
+    status: string;
+    shortDescription: string;
+    fullDescription: string;
+    installments: string;
+    travelDate: string;
+    travelTime?: string;
+    totalSlots: string;
+    availableSlots: string;
+  };
+  content: {
+    selectedInclusions: string[];
+    itinerary: ItineraryDayDraft[];
+    coverImageUrl: string | null;
+    gallery: string[];
+    removedImageUrls: string[];
+    menuItems: MenuItemDraft[];
+    packageDetails: PackageDetailDraft[];
+  };
+  route: {
+    departure: StoredRouteLeg;
+    return: StoredRouteLeg;
+  };
+};
+
+const PACKAGE_DRAFT_VERSION = 2;
+
+function readPackageCreationDraft(storageKey: string): PackageCreationDraft | null {
+  try {
+    const storedDraft = sessionStorage.getItem(storageKey);
+    if (!storedDraft) return null;
+
+    const draft = JSON.parse(storedDraft) as PackageCreationDraft;
+    return draft.version === PACKAGE_DRAFT_VERSION ? draft : null;
+  } catch {
+    sessionStorage.removeItem(storageKey);
+    return null;
+  }
 }
 
-export default function AdminPackageForm() {
+export default function AdminPackageForm({ packageType }: { packageType?: PackageType }) {
   const { id } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const isEditing = !!id && id !== "novo";
+  const draftStorageKey = `evastur:admin:package-draft:${packageType || "external"}`;
+  const [initialDraft] = useState(() => isEditing ? null : readPackageCreationDraft(draftStorageKey));
+  const [packageAssetId] = useState(() => isEditing
+    ? id!
+    : initialDraft?.packageAssetId || crypto.randomUUID());
+  const packageListPath = packageType === "regional"
+    ? "/admin/pacotes/regionais"
+    : packageType === "external"
+      ? "/admin/pacotes/externos"
+      : "/admin/pacotes";
+  const clearCreationDraft = () => {
+    if (!isEditing) sessionStorage.removeItem(draftStorageKey);
+  };
 
-  const [title, setTitle] = useState("");
-  const [slug, setSlug] = useState("");
-  const [slugManual, setSlugManual] = useState(false);
-  const [destinationName, setDestinationName] = useState("");
-  const [category, setCategory] = useState("interno");
-  const [duration, setDuration] = useState("");
-  const [price, setPrice] = useState("");
-  const [status, setStatus] = useState("ativo");
-  const [shortDescription, setShortDescription] = useState("");
-  const [selectedInclusions, setSelectedInclusions] = useState<string[]>([]);
-  const [itinerary, setItinerary] = useState<ItineraryDay[]>([]);
-  const [coverImageUrl, setCoverImageUrl] = useState<string | null>(null);
-  const [gallery, setGallery] = useState<string[]>([]);
-  const [installments, setInstallments] = useState("10");
-  const [travelDate, setTravelDate] = useState("");
-  const [menuItems, setMenuItems] = useState<MenuItemDraft[]>([]);
-  const [totalSlots, setTotalSlots] = useState("");
+  const [title, setTitle] = useState(initialDraft?.general.title || "");
+  const [slug, setSlug] = useState(initialDraft?.general.slug || "");
+  const [slugManual, setSlugManual] = useState(initialDraft?.general.slugManual || false);
+  const [destinationName, setDestinationName] = useState(initialDraft?.general.destinationName || "");
+  const [legacyDestinationId, setLegacyDestinationId] = useState<string | null>(null);
+  const [category, setCategory] = useState(initialDraft?.general.category || (packageType === "regional" ? "interno" : "nacional"));
+  const [duration, setDuration] = useState(initialDraft?.general.duration || "");
+  const [price, setPrice] = useState(initialDraft?.general.price || "");
+  const [status, setStatus] = useState(initialDraft?.general.status || "ativo");
+  const [shortDescription, setShortDescription] = useState(initialDraft?.general.shortDescription || "");
+  const [fullDescription, setFullDescription] = useState(initialDraft?.general.fullDescription || "");
+  const [selectedInclusions, setSelectedInclusions] = useState<string[]>(initialDraft?.content.selectedInclusions || []);
+  const [itinerary, setItinerary] = useState<ItineraryDayDraft[]>(initialDraft?.content.itinerary || []);
+  const [coverImageUrl, setCoverImageUrl] = useState<string | null>(initialDraft?.content.coverImageUrl || null);
+  const [gallery, setGallery] = useState<string[]>(initialDraft?.content.gallery || []);
+  const [removedImageUrls, setRemovedImageUrls] = useState<string[]>(initialDraft?.content.removedImageUrls || []);
+  const [installments, setInstallments] = useState(initialDraft?.general.installments || "10");
+  const [travelDate, setTravelDate] = useState(initialDraft?.general.travelDate || "");
+  const [travelTime, setTravelTime] = useState(initialDraft?.general.travelTime || "");
+  const [menuItems, setMenuItems] = useState<MenuItemDraft[]>(initialDraft?.content.menuItems || []);
+  const [totalSlots, setTotalSlots] = useState(initialDraft?.general.totalSlots || "");
+  const [availableSlots, setAvailableSlots] = useState(initialDraft?.general.availableSlots || "");
 
   // Route info state — Departure (Ida)
-  const [routeDepartureAirportFrom, setRouteDepartureAirportFrom] = useState("");
-  const [routeDepartureCityFrom, setRouteDepartureCityFrom] = useState("");
-  const [routeDepartureAirportTo, setRouteDepartureAirportTo] = useState("");
-  const [routeDepartureCityTo, setRouteDepartureCityTo] = useState("");
-  const [routeDepartureDate, setRouteDepartureDate] = useState("");
-  const [routeDepartureTime, setRouteDepartureTime] = useState("");
-  const [routeDepartureArrivalTime, setRouteDepartureArrivalTime] = useState("");
-  const [routeDepartureAirline, setRouteDepartureAirline] = useState("");
-  const [routeDepartureStops, setRouteDepartureStops] = useState("");
-  const [routeDepartureDuration, setRouteDepartureDuration] = useState("");
-  const [routeDepartureBaggage, setRouteDepartureBaggage] = useState("");
+  const [routeDepartureAirportFrom, setRouteDepartureAirportFrom] = useState(initialDraft?.route.departure.airportCodeFrom || "");
+  const [routeDepartureCityFrom, setRouteDepartureCityFrom] = useState(initialDraft?.route.departure.cityFrom || "");
+  const [routeDepartureAirportTo, setRouteDepartureAirportTo] = useState(initialDraft?.route.departure.airportCodeTo || "");
+  const [routeDepartureCityTo, setRouteDepartureCityTo] = useState(initialDraft?.route.departure.cityTo || "");
+  const [routeDepartureDate, setRouteDepartureDate] = useState(initialDraft?.route.departure.date || "");
+  const [routeDepartureTime, setRouteDepartureTime] = useState(initialDraft?.route.departure.departureTime || "");
+  const [routeDepartureArrivalTime, setRouteDepartureArrivalTime] = useState(initialDraft?.route.departure.arrivalTime || "");
+  const [routeDepartureAirline, setRouteDepartureAirline] = useState(initialDraft?.route.departure.airline || "");
+  const [routeDepartureStops, setRouteDepartureStops] = useState(initialDraft?.route.departure.stops || "");
+  const [routeDepartureDuration, setRouteDepartureDuration] = useState(initialDraft?.route.departure.duration || "");
+  const [routeDepartureBaggage, setRouteDepartureBaggage] = useState(initialDraft?.route.departure.baggage || "");
 
   // Route info state — Return (Volta)
-  const [routeReturnAirportFrom, setRouteReturnAirportFrom] = useState("");
-  const [routeReturnCityFrom, setRouteReturnCityFrom] = useState("");
-  const [routeReturnAirportTo, setRouteReturnAirportTo] = useState("");
-  const [routeReturnCityTo, setRouteReturnCityTo] = useState("");
-  const [routeReturnDate, setRouteReturnDate] = useState("");
-  const [routeReturnTime, setRouteReturnTime] = useState("");
-  const [routeReturnArrivalTime, setRouteReturnArrivalTime] = useState("");
-  const [routeReturnAirline, setRouteReturnAirline] = useState("");
-  const [routeReturnStops, setRouteReturnStops] = useState("");
-  const [routeReturnDuration, setRouteReturnDuration] = useState("");
-  const [routeReturnBaggage, setRouteReturnBaggage] = useState("");
+  const [routeReturnAirportFrom, setRouteReturnAirportFrom] = useState(initialDraft?.route.return.airportCodeFrom || "");
+  const [routeReturnCityFrom, setRouteReturnCityFrom] = useState(initialDraft?.route.return.cityFrom || "");
+  const [routeReturnAirportTo, setRouteReturnAirportTo] = useState(initialDraft?.route.return.airportCodeTo || "");
+  const [routeReturnCityTo, setRouteReturnCityTo] = useState(initialDraft?.route.return.cityTo || "");
+  const [routeReturnDate, setRouteReturnDate] = useState(initialDraft?.route.return.date || "");
+  const [routeReturnTime, setRouteReturnTime] = useState(initialDraft?.route.return.departureTime || "");
+  const [routeReturnArrivalTime, setRouteReturnArrivalTime] = useState(initialDraft?.route.return.arrivalTime || "");
+  const [routeReturnAirline, setRouteReturnAirline] = useState(initialDraft?.route.return.airline || "");
+  const [routeReturnStops, setRouteReturnStops] = useState(initialDraft?.route.return.stops || "");
+  const [routeReturnDuration, setRouteReturnDuration] = useState(initialDraft?.route.return.duration || "");
+  const [routeReturnBaggage, setRouteReturnBaggage] = useState(initialDraft?.route.return.baggage || "");
 
   // Package details state
-  const [packageDetails, setPackageDetails] = useState<PackageDetailItem[]>([]);
+  const [packageDetails, setPackageDetails] = useState<PackageDetailDraft[]>(initialDraft?.content.packageDetails || []);
 
+  useEffect(() => {
+    if (isEditing) return;
+
+    const draft: PackageCreationDraft = {
+        version: PACKAGE_DRAFT_VERSION,
+        packageAssetId,
+        general: {
+          title,
+          slug,
+          slugManual,
+          destinationName,
+          category,
+          duration,
+          price,
+          status,
+          shortDescription,
+          fullDescription,
+          installments,
+          travelDate,
+          travelTime,
+          totalSlots,
+          availableSlots,
+        },
+        content: {
+          selectedInclusions,
+          itinerary,
+          coverImageUrl,
+          gallery,
+          removedImageUrls,
+          menuItems,
+          packageDetails,
+        },
+        route: {
+          departure: {
+            airportCodeFrom: routeDepartureAirportFrom,
+            cityFrom: routeDepartureCityFrom,
+            airportCodeTo: routeDepartureAirportTo,
+            cityTo: routeDepartureCityTo,
+            date: routeDepartureDate,
+            departureTime: routeDepartureTime,
+            arrivalTime: routeDepartureArrivalTime,
+            airline: routeDepartureAirline,
+            stops: routeDepartureStops,
+            duration: routeDepartureDuration,
+            baggage: routeDepartureBaggage,
+          },
+          return: {
+            airportCodeFrom: routeReturnAirportFrom,
+            cityFrom: routeReturnCityFrom,
+            airportCodeTo: routeReturnAirportTo,
+            cityTo: routeReturnCityTo,
+            date: routeReturnDate,
+            departureTime: routeReturnTime,
+            arrivalTime: routeReturnArrivalTime,
+            airline: routeReturnAirline,
+            stops: routeReturnStops,
+            duration: routeReturnDuration,
+            baggage: routeReturnBaggage,
+          },
+        },
+    };
+
+    try {
+      sessionStorage.setItem(draftStorageKey, JSON.stringify(draft));
+    } catch (error) {
+      console.error("Não foi possível salvar o rascunho temporário do pacote:", error);
+    }
+  }, [
+    availableSlots, category, coverImageUrl, draftStorageKey, duration, fullDescription, gallery,
+    installments, isEditing, itinerary, menuItems, packageAssetId, packageDetails,
+    destinationName, price, removedImageUrls,
+    routeDepartureAirline, routeDepartureAirportFrom, routeDepartureAirportTo,
+    routeDepartureArrivalTime, routeDepartureBaggage, routeDepartureCityFrom,
+    routeDepartureCityTo, routeDepartureDate, routeDepartureDuration,
+    routeDepartureStops, routeDepartureTime, routeReturnAirline,
+    routeReturnAirportFrom, routeReturnAirportTo, routeReturnArrivalTime,
+    routeReturnBaggage, routeReturnCityFrom, routeReturnCityTo, routeReturnDate,
+    routeReturnDuration, routeReturnStops, routeReturnTime, selectedInclusions,
+    shortDescription, slug, slugManual, status, title, totalSlots, travelDate, travelTime,
+  ]);
+
+  const queueImageRemoval = (url: string | null) => {
+    if (!url) return;
+    setRemovedImageUrls((urls) => urls.includes(url) ? urls : [...urls, url]);
+  };
+
+  const handleCoverImageChange = (url: string) => {
+    if (coverImageUrl && coverImageUrl !== url) queueImageRemoval(coverImageUrl);
+    setCoverImageUrl(url);
+  };
+
+  const handleCoverImageRemove = () => {
+    queueImageRemoval(coverImageUrl);
+    setCoverImageUrl(null);
+  };
 
   const { isLoading } = useQuery({
     queryKey: ["package-edit", id],
@@ -204,21 +371,48 @@ export default function AdminPackageForm() {
         .eq("package_id", id!)
         .order("sort_order");
 
+      const { data: destinationRelations } = await supabase
+        .from("package_destinations")
+        .select("destination_id, is_primary, sort_order, destinations(name)")
+        .eq("package_id", id!)
+        .order("sort_order");
+
+      const legacyDestinationResult = pkg.destination_id
+        ? await supabase
+            .from("destinations")
+            .select("name")
+            .eq("id", pkg.destination_id)
+            .maybeSingle()
+        : null;
+
+      const ri = pkg.route_info as StoredRouteInfo | null;
+      const resolvedDestinationName = resolvePackageDestinationName({
+        destinationName: pkg.destination_name,
+        legacyDestinationName: legacyDestinationResult?.data?.name,
+        relations: destinationRelations as DestinationNameRelation[] | null,
+        routeDestinationName: ri?.departure?.cityTo || ri?.departure?.to,
+      });
+
       setTitle(pkg.title);
       setSlug(pkg.slug);
       setSlugManual(true);
-      // Suporta tanto o antigo destination_id->name quanto o novo destination_name
-      const dName = (pkg as any).destination_name || "";
-      setDestinationName(dName);
+      setDestinationName(resolvedDestinationName);
+      setLegacyDestinationId(
+        pkg.destination_id
+        || getPrimaryDestinationId(destinationRelations as DestinationNameRelation[] | null)
+      );
       setCategory(pkg.category);
       setDuration(pkg.duration || "");
       setPrice(pkg.price.toString());
       setStatus(pkg.status);
       setShortDescription(pkg.short_description || "");
+      setFullDescription(pkg.full_description || "");
       setCoverImageUrl(pkg.cover_image_url || null);
       setInstallments(String(pkg.installments || 10));
-      setTravelDate((pkg as any).travel_date ? (pkg as any).travel_date.split("T")[0] : "");
-      setTotalSlots((pkg as any).available_slots != null ? String((pkg as any).available_slots) : "");
+      setTravelDate(pkg.travel_date ? pkg.travel_date.split("T")[0] : "");
+      setTravelTime(pkg.travel_time ? pkg.travel_time.slice(0, 5) : "");
+      setTotalSlots(pkg.total_slots != null ? String(pkg.total_slots) : "");
+      setAvailableSlots(pkg.available_slots != null ? String(pkg.available_slots) : "");
       setSelectedInclusions(inclusions?.map((i) => i.inclusion_key) || []);
       setItinerary(
         days?.map((d) => ({
@@ -238,7 +432,6 @@ export default function AdminPackageForm() {
       );
 
       // Load route info (retrocompatível com dados antigos from/to)
-      const ri = (pkg as any).route_info;
       if (ri && typeof ri === "object") {
         const dep = ri.departure || {};
         setRouteDepartureAirportFrom(dep.airportCodeFrom || "");
@@ -268,9 +461,9 @@ export default function AdminPackageForm() {
       }
 
       // Load package details
-      const pd = (pkg as any).package_details;
+      const pd = pkg.package_details as StoredPackageDetail[] | null;
       if (pd && Array.isArray(pd)) {
-        setPackageDetails(pd.map((item: any) => ({
+        setPackageDetails(pd.map((item) => ({
           id: item.id || crypto.randomUUID(),
           label: item.label || "",
           value: item.value || "",
@@ -283,20 +476,89 @@ export default function AdminPackageForm() {
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const slotsValue = totalSlots ? parseInt(totalSlots) : null;
-      const pkgData: any = {
-        title,
-        slug,
-        destination_name: destinationName || null,
-        destination_id: null,
+      if (!title.trim()) throw new Error("Informe o título do produto.");
+      if (!destinationName.trim()) throw new Error("Informe o destino ou local do produto.");
+      if (!slug.trim() || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug.trim())) {
+        throw new Error("Use um slug válido, com letras minúsculas, números e hífens.");
+      }
+      const priceValue = Number(price);
+      const installmentsValue = Number(installments);
+      if (!Number.isFinite(priceValue) || priceValue <= 0) {
+        throw new Error("Informe um preço maior que zero.");
+      }
+      if (!Number.isInteger(installmentsValue) || installmentsValue < 1 || installmentsValue > 48) {
+        throw new Error("O parcelamento deve estar entre 1 e 48 vezes.");
+      }
+      if (packageType === "regional" && category !== "interno") {
+        throw new Error("Experiências regionais devem usar a categoria Regional — Acre.");
+      }
+      if (packageType === "external" && category === "interno") {
+        throw new Error("Pacotes externos devem ser nacionais, internacionais ou cruzeiros.");
+      }
+      if (status !== "rascunho" && !coverImageUrl) {
+        throw new Error("Adicione uma imagem de capa antes de publicar o produto.");
+      }
+      if (routeDepartureDate && routeReturnDate && routeReturnDate < routeDepartureDate) {
+        throw new Error("A data da volta não pode ser anterior à data da ida.");
+      }
+      if (packageType === "regional" && Boolean(travelDate) !== Boolean(travelTime)) {
+        throw new Error("Informe a data e o horário da experiência ou deixe os dois campos vazios.");
+      }
+
+      const totalSlotsValue = totalSlots ? Number(totalSlots) : null;
+      const availableSlotsValue = availableSlots
+        ? Number(availableSlots)
+        : totalSlotsValue;
+      if (totalSlotsValue !== null && totalSlotsValue < 0) {
+        throw new Error("A capacidade total não pode ser negativa.");
+      }
+      if (totalSlotsValue !== null && !Number.isInteger(totalSlotsValue)) {
+        throw new Error("A capacidade total deve ser um número inteiro.");
+      }
+      if (availableSlotsValue !== null && availableSlotsValue < 0) {
+        throw new Error("As vagas disponíveis não podem ser negativas.");
+      }
+      if (availableSlotsValue !== null && !Number.isInteger(availableSlotsValue)) {
+        throw new Error("As vagas disponíveis devem ser um número inteiro.");
+      }
+      if (
+        totalSlotsValue !== null &&
+        availableSlotsValue !== null &&
+        availableSlotsValue > totalSlotsValue
+      ) {
+        throw new Error("As vagas disponíveis não podem superar a capacidade total.");
+      }
+      const pkgData: { [key: string]: Json | undefined } = {
+        id: packageAssetId,
+        title: title.trim(),
+        destination_name: destinationName.trim(),
+        slug: slug.trim(),
         category,
-        duration: duration || null,
-        price: parseFloat(price) || 0,
+        package_type: category === "interno" ? "regional" : "external",
+        travel_scope:
+          category === "internacional"
+            ? "international"
+            : category === "interno"
+              ? null
+              : "national",
+        duration: duration.trim() || null,
+        price: priceValue,
         status,
-        short_description: shortDescription || null,
+        active: status !== "rascunho",
+        publication_status: status === "rascunho" ? "draft" : "published",
+        sales_status:
+          status === "esgotado"
+            ? "sold_out"
+            : status === "rascunho"
+              ? "paused"
+              : "available",
+        short_description: shortDescription.trim() || null,
+        full_description: fullDescription.trim() || null,
         cover_image_url: coverImageUrl || null,
-        installments: parseInt(installments) || 10,
+        cover_image_path: getStoragePathFromPublicUrl(coverImageUrl, "packages"),
+        installments: installmentsValue,
         travel_date: travelDate || null,
+        travel_time: category === "interno" ? travelTime || null : null,
         updated_at: new Date().toISOString(),
       };
 
@@ -342,99 +604,149 @@ export default function AdminPackageForm() {
         ? validDetails.map(d => ({ id: d.id, label: d.label, value: d.value }))
         : null;
 
-      if (!isEditing) {
-        // Na criação: total_slots e available_slots iguais
-        pkgData.total_slots = slotsValue;
-        pkgData.available_slots = slotsValue;
-      } else {
-        // Na edição: admin ajusta available_slots direto
-        pkgData.available_slots = slotsValue;
-        // Se o total_slots original era null e agora definiu, atualiza também
-        if (slotsValue !== null) {
-          pkgData.total_slots = slotsValue;
+      pkgData.total_slots = totalSlotsValue;
+      pkgData.available_slots = availableSlotsValue;
+
+      const inclusionRows = selectedInclusions.map((key) => ({
+        inclusion_key: key,
+        label: inclusionOptions.find((option) => option.key === key)?.label || key,
+      }));
+      const itineraryRows = itinerary.map((day, index) => ({
+        day_number: index + 1,
+        title: day.title,
+        description: day.description || null,
+      }));
+      const imageRows = gallery.map((url, index) => ({
+        image_url: url,
+        storage_path: getStoragePathFromPublicUrl(url, "packages"),
+        alt_text: `${title} — foto ${index + 1}`,
+        caption: null,
+        sort_order: index + 1,
+      }));
+      const menuRows = category === "interno"
+        ? menuItems.map((item, index) => ({
+            name: item.name,
+            description: item.description || null,
+            price: parseFloat(item.price) || 0,
+            sort_order: index + 1,
+          }))
+        : [];
+
+      const saveDirectPackage = async () => {
+        const { error: packageError } = await supabase
+          .from("packages")
+          .upsert(pkgData as Database["public"]["Tables"]["packages"]["Insert"], {
+            onConflict: "id",
+          });
+        if (packageError) throw packageError;
+
+        try {
+          const deletionResults = await Promise.all([
+            supabase.from("package_inclusions").delete().eq("package_id", packageAssetId),
+            supabase.from("package_itinerary_days").delete().eq("package_id", packageAssetId),
+            supabase.from("package_images").delete().eq("package_id", packageAssetId),
+            supabase.from("package_menu_items").delete().eq("package_id", packageAssetId),
+            supabase.from("package_destinations").delete().eq("package_id", packageAssetId),
+          ]);
+          const deletionError = deletionResults.find((result) => result.error)?.error;
+          if (deletionError) throw deletionError;
+
+          if (inclusionRows.length > 0) {
+            const { error } = await supabase.from("package_inclusions").insert(
+              inclusionRows.map((row) => ({ ...row, package_id: packageAssetId }))
+            );
+            if (error) throw error;
+          }
+
+          if (itineraryRows.length > 0) {
+            const { error } = await supabase.from("package_itinerary_days").insert(
+              itineraryRows.map((row) => ({ ...row, package_id: packageAssetId }))
+            );
+            if (error) throw error;
+          }
+
+          if (imageRows.length > 0) {
+            const { error } = await supabase.from("package_images").insert(
+              imageRows.map((row) => ({ ...row, package_id: packageAssetId }))
+            );
+            if (error) throw error;
+          }
+
+          if (menuRows.length > 0) {
+            const { error } = await supabase.from("package_menu_items").insert(
+              menuRows.map((row) => ({ ...row, package_id: packageAssetId }))
+            );
+            if (error) throw error;
+          }
+        } catch (error) {
+          if (!isEditing) {
+            const { error: cleanupError } = await supabase
+              .from("packages")
+              .delete()
+              .eq("id", packageAssetId);
+            if (cleanupError) {
+              console.error("Não foi possível desfazer o pacote incompleto:", cleanupError);
+            }
+          }
+          throw error;
         }
+
+        return packageAssetId;
+      };
+
+      const { data: rpcPackageId, error: rpcError } = await supabase.rpc("save_package_catalog", {
+        p_package: pkgData,
+        p_inclusions: inclusionRows,
+        p_itinerary: itineraryRows,
+        p_images: imageRows,
+        p_menu_items: menuRows,
+        // Compatibilidade temporária: a RPC anterior à simplificação exige
+        // um destino relacionado. A RPC nova aceita a lista e a ignora.
+        p_destinations: legacyDestinationId
+          ? [{ destination_id: legacyDestinationId, is_primary: true, sort_order: 0 }]
+          : [],
+        p_travel_time: category === "interno" ? travelTime || null : null,
+      });
+
+      let pkgId = rpcPackageId;
+      if (rpcError) {
+        const legacyDestinationRequirement = /vincule pelo menos um destino cadastrado/i.test(
+          rpcError.message
+        );
+        if (!legacyDestinationRequirement || legacyDestinationId) throw rpcError;
+        pkgId = await saveDirectPackage();
       }
 
-      let pkgId = id;
-
-      if (isEditing) {
-        const { error } = await supabase
-          .from("packages")
-          .update(pkgData as any)
-          .eq("id", id);
-        if (error) throw error;
-      } else {
-        const { data, error } = await supabase
-          .from("packages")
-          .insert(pkgData as any)
-          .select("id")
-          .single();
-        if (error) throw error;
-        pkgId = data.id;
+      let imageCleanupFailed = false;
+      const usedImageUrls = new Set([coverImageUrl, ...gallery].filter(Boolean));
+      const imageUrlsToRemove = removedImageUrls.filter((url) => !usedImageUrls.has(url));
+      try {
+        await removeStorageImages("packages", imageUrlsToRemove);
+      } catch (error) {
+        imageCleanupFailed = true;
+        console.error("Não foi possível remover imagens antigas do pacote:", error);
       }
 
-      // Sincroniza inclusões (deleta antigas e insere novas)
-      await supabase.from("package_inclusions").delete().eq("package_id", pkgId!);
-      if (selectedInclusions.length > 0) {
-        const incRows = selectedInclusions.map((key) => ({
-          package_id: pkgId!,
-          inclusion_key: key,
-          label: inclusionOptions.find((o) => o.key === key)?.label || key,
-        }));
-        const { error } = await supabase.from("package_inclusions").insert(incRows);
-        if (error) throw error;
-      }
-
-      // Sincroniza roteiro dia a dia
-      await supabase.from("package_itinerary_days").delete().eq("package_id", pkgId!);
-      if (itinerary.length > 0) {
-        const dayRows = itinerary.map((day, i) => ({
-          package_id: pkgId!,
-          day_number: i + 1,
-          title: day.title,
-          description: day.description || null,
-        }));
-        const { error } = await supabase.from("package_itinerary_days").insert(dayRows);
-        if (error) throw error;
-      }
-
-      // Sincroniza galeria de fotos
-      await supabase.from("package_images").delete().eq("package_id", pkgId!);
-      if (gallery.length > 0) {
-        const imageRows = gallery.map((url, i) => ({
-          package_id: pkgId!,
-          image_url: url,
-          sort_order: i + 1,
-        }));
-        const { error } = await supabase.from("package_images").insert(imageRows);
-        if (error) throw error;
-      }
-
-      // Sincroniza cardápio (só para pacotes internos)
-      await supabase.from("package_menu_items").delete().eq("package_id", pkgId!);
-      if (category === "interno" && menuItems.length > 0) {
-        const menuRows = menuItems.map((item, i) => ({
-          package_id: pkgId!,
-          name: item.name,
-          description: item.description || null,
-          price: parseFloat(item.price) || 0,
-          sort_order: i + 1,
-        }));
-        const { error } = await supabase.from("package_menu_items").insert(menuRows);
-        if (error) throw error;
-      }
-
-      return { newPkgId: isEditing ? null : pkgId, title, price, coverImageUrl, slug };
+      return { newPkgId: isEditing ? null : pkgId, title, price, coverImageUrl, slug, imageCleanupFailed };
     },
-    onSuccess: (data: any) => {
+    onSuccess: (data) => {
+      clearCreationDraft();
       queryClient.invalidateQueries({ queryKey: ["admin-packages"] });
       toast({ title: isEditing ? "Pacote atualizado! ✅" : "Pacote criado! 🎉" });
+      if (data?.imageCleanupFailed) {
+        toast({
+          title: "Pacote salvo, mas uma imagem antiga não foi excluída",
+          description: "O conteúdo está correto. A limpeza do Storage pode ser refeita depois.",
+          variant: "destructive",
+        });
+      }
       if (data?.newPkgId) {
         toast({
           title: "📧 Enviar Newsletter?",
           description: "Notificar assinantes sobre o novo pacote?",
           action: (
-            <button
+            <ToastAction
+              altText="Enviar newsletter sobre o novo pacote"
               onClick={() =>
                 sendNewsletterMutation.mutate({
                   id: data.newPkgId,
@@ -444,14 +756,14 @@ export default function AdminPackageForm() {
                   slug: data.slug,
                 })
               }
-              className="bg-primary text-primary-foreground px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1"
+              className="flex items-center gap-1"
             >
               <Send size={12} /> Enviar
-            </button>
-          ) as any,
+            </ToastAction>
+          ),
         });
       }
-      navigate("/admin/pacotes");
+      navigate(packageListPath);
     },
     onError: (err: Error) => {
       toast({ title: "Erro ao salvar", description: err.message, variant: "destructive" });
@@ -519,14 +831,14 @@ export default function AdminPackageForm() {
     );
   }
 
-  const canSave = !!title && !!slug && !saveMutation.isPending;
+  const canSave = !!title.trim() && !!slug.trim() && !!destinationName.trim() && !saveMutation.isPending;
 
   return (
     <div className="max-w-3xl mx-auto">
       {/* Page header */}
       <div className="flex items-center gap-3 mb-8">
         <Link
-          to="/admin/pacotes"
+          to={packageListPath}
           className="w-9 h-9 rounded-xl border border-border flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-border/80 transition-colors"
         >
           <ArrowLeft size={18} />
@@ -536,14 +848,16 @@ export default function AdminPackageForm() {
             Admin / Pacotes
           </p>
           <h1 className="text-2xl font-bold text-foreground">
-            {isEditing ? "Editar Pacote" : "Criar Novo Pacote"}
+            {isEditing
+              ? packageType === "regional" ? "Editar Experiência Regional" : "Editar Pacote Externo"
+              : packageType === "regional" ? "Criar Experiência Regional" : "Criar Pacote Externo"}
           </h1>
         </div>
       </div>
 
       <div className="space-y-5">
         {/* ── 1. INFORMAÇÕES GERAIS ── */}
-        <SectionCard
+        <ProductFormSection
           icon={Info}
           title="Informações Gerais"
           description="Dados principais do pacote que o cliente verá na listagem"
@@ -564,35 +878,39 @@ export default function AdminPackageForm() {
               />
             </div>
 
-            {/* Nome do Destino */}
-            <div className="space-y-1.5">
-              <Label className="text-sm font-medium">Destino</Label>
+            <div className="sm:col-span-2 space-y-1.5">
+              <Label className="text-sm font-medium">
+                Destino ou local <span className="text-red-500">*</span>
+              </Label>
               <Input
                 value={destinationName}
-                onChange={(e) => setDestinationName(e.target.value)}
-                placeholder="Ex: Cruzeiro do Sul, Rio Croa"
+                onChange={(event) => setDestinationName(event.target.value)}
+                placeholder={packageType === "regional"
+                  ? "Ex: Rio Croa — Cruzeiro do Sul, Acre"
+                  : "Ex: Fortaleza, Ceará"}
                 className="h-11"
               />
               <p className="text-xs text-muted-foreground">
-                Digite o nome do destino livremente
+                Informe diretamente onde a viagem ou experiência acontece. Não é necessário cadastrar uma página de destino.
               </p>
             </div>
 
-            {/* Categoria do pacote */}
-            <div className="space-y-1.5">
-              <Label className="text-sm font-medium">Categoria</Label>
-              <Select value={category} onValueChange={setCategory}>
-                <SelectTrigger className="h-11">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="interno">🌿 Interno — Regional</SelectItem>
-                  <SelectItem value="nacional">🇧🇷 Nacional</SelectItem>
-                  <SelectItem value="internacional">✈️ Internacional</SelectItem>
-                  <SelectItem value="cruzeiro">🚢 Cruzeiro</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            {/* A modalidade regional já define a categoria automaticamente. */}
+            {packageType !== "regional" && (
+              <div className="space-y-1.5">
+                <Label className="text-sm font-medium">Categoria</Label>
+                <Select value={category} onValueChange={setCategory}>
+                  <SelectTrigger className="h-11">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="nacional">🇧🇷 Nacional</SelectItem>
+                    <SelectItem value="internacional">✈️ Internacional</SelectItem>
+                    <SelectItem value="cruzeiro">🚢 Cruzeiro</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             {/* Preço por pessoa */}
             <div className="space-y-1.5">
@@ -643,11 +961,52 @@ export default function AdminPackageForm() {
               />
             </div>
 
-            {/* Data da viagem — só para pacotes NÃO internos (admin define a data) */}
-            {category !== "interno" && (
+            {packageType === "regional" ? (
+              <div className="sm:col-span-2 rounded-xl border border-sky-100 bg-sky-50/40 p-4">
+                <div className="mb-3 flex items-start gap-2">
+                  <CalendarClock className="mt-0.5 text-sky-600" size={18} />
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">Data fixa da experiência</p>
+                    <p className="text-xs leading-relaxed text-muted-foreground">
+                      Opcional. Preencha os dois campos somente quando a experiência acontecer em uma data específica.
+                    </p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="regional-travel-date" className="text-sm font-medium">Data</Label>
+                    <Input
+                      id="regional-travel-date"
+                      type="date"
+                      value={travelDate}
+                      onChange={(event) => setTravelDate(event.target.value)}
+                      aria-invalid={Boolean(travelDate) !== Boolean(travelTime)}
+                      className="h-11"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="regional-travel-time" className="text-sm font-medium">Horário</Label>
+                    <Input
+                      id="regional-travel-time"
+                      type="time"
+                      value={travelTime}
+                      onChange={(event) => setTravelTime(event.target.value)}
+                      aria-invalid={Boolean(travelDate) !== Boolean(travelTime)}
+                      className="h-11"
+                    />
+                  </div>
+                </div>
+                {Boolean(travelDate) !== Boolean(travelTime) && (
+                  <p className="mt-2 text-xs font-medium text-destructive">
+                    Preencha data e horário juntos ou deixe ambos vazios.
+                  </p>
+                )}
+              </div>
+            ) : (
               <div className="space-y-1.5">
-                <Label className="text-sm font-medium">Data da Viagem</Label>
+                <Label htmlFor="external-travel-date" className="text-sm font-medium">Data da Viagem</Label>
                 <Input
+                  id="external-travel-date"
                   type="date"
                   value={travelDate}
                   onChange={(e) => setTravelDate(e.target.value)}
@@ -656,26 +1015,12 @@ export default function AdminPackageForm() {
               </div>
             )}
 
-            {/* Vagas disponíveis */}
-            <div className="space-y-1.5">
-              <Label className="text-sm font-medium flex items-center gap-1.5">
-                <Users size={14} className="text-muted-foreground" />
-                Vagas disponíveis
-              </Label>
-              <Input
-                type="number"
-                min={0}
-                value={totalSlots}
-                onChange={(e) => setTotalSlots(e.target.value)}
-                placeholder="Ilimitado"
-                className="h-11"
-              />
-              <p className="text-xs text-muted-foreground">
-                {totalSlots
-                  ? `${totalSlots} vaga(s) — ao esgotar, o pacote será marcado como esgotado automaticamente`
-                  : "Deixe vazio para vagas ilimitadas"}
-              </p>
-            </div>
+            <CapacityFields
+              totalSlots={totalSlots}
+              availableSlots={availableSlots}
+              onTotalSlotsChange={setTotalSlots}
+              onAvailableSlotsChange={setAvailableSlots}
+            />
 
 
             {/* Status de venda */}
@@ -711,10 +1056,11 @@ export default function AdminPackageForm() {
               </div>
             </div>
           </div>
-        </SectionCard>
+        </ProductFormSection>
 
         {/* ── 1.5 TRAJETO IDA E VOLTA ── */}
-        <SectionCard
+        {category !== "interno" && (
+        <ProductFormSection
           icon={Plane}
           title="Informações de Voo"
           description="Companhia aérea, aeroportos, horários, bagagem e paradas — dados completos para o cliente"
@@ -1016,296 +1362,44 @@ export default function AdminPackageForm() {
               )}
             </div>
           </div>
-        </SectionCard>
+        </ProductFormSection>
+        )}
 
-        {/* ── 2. IMAGENS ── */}
-        <SectionCard
-          icon={Image}
-          title="Imagens"
-          description="Banner de capa e galeria de fotos do pacote"
-          color="text-violet-600"
-          iconBg="bg-violet-50"
-        >
-          <div className="space-y-6">
-            {/* ── BANNER (HERO) ── */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label className="text-sm font-medium flex items-center gap-2">
-                    🖼️ Imagem do Banner (Hero)
-                  </Label>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Imagem panorâmica exibida no topo da página do pacote
-                  </p>
-                </div>
-                <div className="flex items-center gap-1.5 bg-violet-50 border border-violet-200 rounded-lg px-3 py-1.5">
-                  <span className="text-xs font-bold text-violet-700">1920 × 800px</span>
-                  <span className="text-[10px] text-violet-500 font-medium">(recomendado)</span>
-                </div>
-              </div>
+        <ProductMediaSection
+          assetId={packageAssetId}
+          coverImageUrl={coverImageUrl}
+          gallery={gallery}
+          onCoverChange={handleCoverImageChange}
+          onCoverRemove={handleCoverImageRemove}
+          onGalleryChange={setGallery}
+          onGalleryImageRemove={queueImageRemoval}
+        />
 
-              {/* Preview com aspecto correto */}
-              {coverImageUrl && (
-                <div className="relative rounded-xl overflow-hidden border border-border bg-slate-100" style={{ aspectRatio: "12/5" }}>
-                  <img
-                    src={coverImageUrl}
-                    alt="Preview do banner"
-                    className="absolute inset-0 w-full h-full object-cover"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
-                  <div className="absolute bottom-3 left-3 right-3 flex items-end justify-between">
-                    <span className="text-white/90 text-xs font-medium bg-black/40 backdrop-blur-sm px-2.5 py-1 rounded-full">
-                      Preview do banner (como aparece no site)
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setCoverImageUrl(null)}
-                      className="text-white/80 hover:text-red-300 bg-black/40 backdrop-blur-sm p-1.5 rounded-full transition-colors"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                </div>
-              )}
+        <ProductDescriptionSection
+          shortValue={shortDescription}
+          fullValue={fullDescription}
+          onShortChange={setShortDescription}
+          onFullChange={setFullDescription}
+        />
 
-              <ImageUpload
-                bucket="packages"
-                value={coverImageUrl}
-                onChange={setCoverImageUrl}
-                onRemove={() => setCoverImageUrl(null)}
-                label="Arraste ou clique para enviar o banner"
-              />
+        <ProductInclusionsSection
+          options={inclusionOptions}
+          selectedKeys={selectedInclusions}
+          onToggle={toggleInclusion}
+        />
 
-              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-start gap-2">
-                <Info size={14} className="text-amber-500 shrink-0 mt-0.5" />
-                <p className="text-xs text-amber-700 leading-relaxed">
-                  <strong>Dica:</strong> Use imagens <strong>horizontais/paisagem</strong> de pelo menos <strong>1920×800px</strong> para evitar cortes. 
-                  Imagens verticais ou quadradas ficarão cortadas no banner. A proporção ideal é <strong>12:5</strong> (panorâmica).
-                </p>
-              </div>
-            </div>
+        <ProductItinerarySection
+          days={itinerary}
+          onAdd={addDay}
+          onRemove={removeDay}
+          onUpdate={updateDay}
+        />
 
-            {/* ── GALERIA DE FOTOS ── */}
-            <div className="border-t border-border/50 pt-5 space-y-3">
-              <div>
-                <Label className="text-sm font-medium flex items-center gap-2">
-                  📸 Galeria de Fotos
-                </Label>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Fotos adicionais exibidas na página de detalhes — ao clicar, o cliente será direcionado ao WhatsApp
-                </p>
-              </div>
-              <MultiImageUpload
-                bucket="packages"
-                values={gallery}
-                onChange={setGallery}
-              />
-            </div>
-          </div>
-        </SectionCard>
-
-        {/* ── 3. DESCRIÇÃO ── */}
-        <SectionCard
-          icon={FileText}
-          title="Descrição"
-          description="Texto de apresentação do pacote para o cliente"
-          color="text-amber-600"
-          iconBg="bg-amber-50"
-        >
-          <div className="space-y-1.5">
-            <Label className="text-sm font-medium">Descrição curta</Label>
-            <p className="text-xs text-muted-foreground mb-2">
-              Aparece nos cards da listagem e no topo da página do pacote (2–3 linhas)
-            </p>
-            <Textarea
-              value={shortDescription}
-              onChange={(e) => setShortDescription(e.target.value)}
-              rows={4}
-              placeholder="Descreva brevemente a experiência e os principais atrativos deste pacote..."
-              className="resize-none"
-            />
-          </div>
-        </SectionCard>
-
-        {/* ── 4. INCLUSÕES ── */}
-        <SectionCard
-          icon={CheckSquare}
-          title="O que está incluso?"
-          description="Selecione todos os itens incluídos no pacote"
-          color="text-emerald-600"
-          iconBg="bg-emerald-50"
-        >
-          <div className="flex flex-wrap gap-2">
-            {inclusionOptions.map((opt) => {
-              const active = selectedInclusions.includes(opt.key);
-              return (
-                <button
-                  key={opt.key}
-                  type="button"
-                  onClick={() => toggleInclusion(opt.key)}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all duration-150 border ${
-                    active
-                      ? "bg-emerald-600 text-white border-emerald-600 shadow-sm"
-                      : "border-border text-muted-foreground hover:border-emerald-300 hover:text-emerald-700 hover:bg-emerald-50"
-                  }`}
-                >
-                  <span>{opt.emoji}</span>
-                  {opt.label}
-                </button>
-              );
-            })}
-          </div>
-          {selectedInclusions.length > 0 && (
-            <p className="text-xs text-muted-foreground mt-3">
-              {selectedInclusions.length} item(s) selecionado(s)
-            </p>
-          )}
-        </SectionCard>
-
-        {/* ── 5. ROTEIRO ── */}
-        <SectionCard
-          icon={Map}
-          title="Roteiro Dia a Dia"
-          description="Descrição das atividades em cada dia da viagem (opcional)"
-          color="text-rose-600"
-          iconBg="bg-rose-50"
-        >
-          <div className="space-y-3">
-            {itinerary.map((day, i) => (
-              <div
-                key={day.id}
-                className="rounded-xl border border-border bg-muted/20 p-4 space-y-3"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span
-                      className="w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold text-white shrink-0"
-                      style={{ background: "hsl(232 100% 23%)" }}
-                    >
-                      {i + 1}
-                    </span>
-                    <span className="text-sm font-semibold text-foreground">
-                      Dia {i + 1}
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => removeDay(day.id)}
-                    className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-red-500 hover:bg-red-50 transition-colors"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-                <Input
-                  value={day.title}
-                  onChange={(e) => updateDay(day.id, "title", e.target.value)}
-                  placeholder="Título do dia (ex: Chegada e trilha)"
-                  className="h-10"
-                />
-                <Textarea
-                  value={day.description}
-                  onChange={(e) => updateDay(day.id, "description", e.target.value)}
-                  placeholder="Descreva as atividades deste dia..."
-                  rows={3}
-                  className="resize-none"
-                />
-              </div>
-            ))}
-
-            {itinerary.length === 0 && (
-              <div className="border-2 border-dashed border-border rounded-xl py-8 text-center">
-                <Map size={28} className="text-muted-foreground/40 mx-auto mb-2" />
-                <p className="text-sm text-muted-foreground">
-                  Nenhum dia adicionado ainda
-                </p>
-              </div>
-            )}
-
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={addDay}
-              className="gap-2 w-full border-dashed"
-            >
-              <Plus size={14} />
-              Adicionar dia ao roteiro
-            </Button>
-          </div>
-        </SectionCard>
-
-        {/* ── 5.5 DETALHES DO PACOTE ── */}
-        <SectionCard
-          icon={ClipboardList}
-          title="Detalhes do Pacote"
-          description="Informações adicionais como tipo de tarifa, bagagem, data de emissão, etc. (opcional)"
-          color="text-cyan-600"
-          iconBg="bg-cyan-50"
-        >
-          <div className="space-y-3">
-            {packageDetails.map((item, i) => (
-              <div
-                key={item.id}
-                className="flex items-start gap-2"
-              >
-                <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">Rótulo</Label>
-                    <Input
-                      value={item.label}
-                      onChange={(e) => setPackageDetails(prev => prev.map(d => d.id === item.id ? { ...d, label: e.target.value } : d))}
-                      placeholder="Ex: Tipo de Tarifa"
-                      className="h-9 text-sm"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">Valor</Label>
-                    <Input
-                      value={item.value}
-                      onChange={(e) => setPackageDetails(prev => prev.map(d => d.id === item.id ? { ...d, value: e.target.value } : d))}
-                      placeholder="Ex: Econômica com bagagem inclusa"
-                      className="h-9 text-sm"
-                    />
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setPackageDetails(prev => prev.filter(d => d.id !== item.id))}
-                  className="w-8 h-8 mt-5 rounded-lg flex items-center justify-center text-muted-foreground hover:text-red-500 hover:bg-red-50 transition-colors shrink-0"
-                >
-                  <Trash2 size={14} />
-                </button>
-              </div>
-            ))}
-
-            {packageDetails.length === 0 && (
-              <div className="border-2 border-dashed border-cyan-200 rounded-xl py-8 text-center bg-cyan-50/30">
-                <ClipboardList size={28} className="text-cyan-300 mx-auto mb-2" />
-                <p className="text-sm text-muted-foreground">
-                  Nenhum detalhe adicionado
-                </p>
-                <p className="text-xs text-muted-foreground/70 mt-1">
-                  Adicione informações como tarifa, bagagem, data de emissão, etc.
-                </p>
-              </div>
-            )}
-
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setPackageDetails(prev => [...prev, { id: crypto.randomUUID(), label: "", value: "" }])}
-              className="gap-2 w-full border-dashed border-cyan-300 text-cyan-700 hover:bg-cyan-50 hover:border-cyan-400"
-            >
-              <Plus size={14} />
-              Adicionar detalhe
-            </Button>
-          </div>
-        </SectionCard>
+        <ProductDetailsSection items={packageDetails} onChange={setPackageDetails} />
 
         {/* ── 6. CARDÁPIO (somente internos) ── */}
         {category === "interno" && (
-          <SectionCard
+          <ProductFormSection
             icon={UtensilsCrossed}
             title="Cardápio do Passeio"
             description="Itens opcionais que o cliente poderá escolher ao fazer a reserva (bebidas, refeições, etc.)"
@@ -1397,13 +1491,13 @@ export default function AdminPackageForm() {
                 Adicionar item ao cardápio
               </Button>
             </div>
-          </SectionCard>
+          </ProductFormSection>
         )}
 
         {/* ── BOTÕES DE AÇÃO ── */}
         <div className="flex items-center justify-between pt-2 pb-8">
           <Button variant="ghost" asChild className="text-muted-foreground">
-            <Link to="/admin/pacotes">← Cancelar</Link>
+            <Link to={packageListPath} onClick={clearCreationDraft}>← Cancelar</Link>
           </Button>
           <Button
             onClick={() => saveMutation.mutate()}
@@ -1424,7 +1518,11 @@ export default function AdminPackageForm() {
               ? "Salvando..."
               : isEditing
               ? "Salvar alterações"
-              : "Publicar pacote"}
+              : status === "rascunho"
+                ? "Salvar rascunho"
+                : packageType === "regional"
+                  ? "Publicar experiência"
+                  : "Publicar pacote"}
           </Button>
         </div>
       </div>

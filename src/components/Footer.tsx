@@ -45,7 +45,7 @@ const Footer = () => {
             <h4 className="text-white font-semibold text-sm uppercase tracking-wider mb-5">Navegação</h4>
             <ul className="space-y-3 text-sm">
               <li><Link to="/" className="hover:text-white transition-colors">Home</Link></li>
-              <li><Link to="/destinos" className="hover:text-white transition-colors">Destinos</Link></li>
+              <li><Link to="/destinos" className="hover:text-white transition-colors">Pacotes</Link></li>
               <li><Link to="/sobre" className="hover:text-white transition-colors">Sobre Nós</Link></li>
               <li><Link to="/#contato" className="hover:text-white transition-colors">Contato</Link></li>
             </ul>
@@ -92,7 +92,7 @@ const Footer = () => {
           <div className="flex items-center gap-3 flex-wrap justify-center w-full">
             <span>© {new Date().getFullYear()} {settings?.agencyName}. Todos os direitos reservados.</span>
             <span className="hidden sm:inline">•</span>
-            <span>Certificado Cadastur: {settings?.cadastur}</span>
+            <span>CNPJ: 01.444.287/0001-01</span>
           </div>
         </div>
       </div>

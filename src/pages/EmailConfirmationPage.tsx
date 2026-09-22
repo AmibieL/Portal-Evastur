@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { Mail, ArrowLeft, RefreshCw, Loader2, CheckCircle2, Inbox, Sparkles } from "lucide-react";
+import { Mail, ArrowLeft, RefreshCw, Loader2, CheckCircle2, Inbox } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -67,7 +67,7 @@ export default function EmailConfirmationPage() {
             className="absolute bottom-[22%] right-[8%] bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl p-5 w-48"
           >
             <div className="flex items-center gap-2 mb-1">
-              <Sparkles size={14} className="text-amber-300" />
+              <Mail size={14} className="text-amber-300" />
               <span className="text-white text-xs font-semibold">Falta pouco!</span>
             </div>
             <p className="text-white/50 text-[10px]">Confirme para acessar pacotes exclusivos da Amazônia.</p>

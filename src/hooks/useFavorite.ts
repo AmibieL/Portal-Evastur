@@ -75,7 +75,7 @@ export function useFavorite(packageId?: string) {
         toast.info("Removido dos favoritos.");
       }
     },
-    onError: (error: any) => {
+    onError: (error: Error) => {
       if (error.message !== "Necessário login") {
         toast.error("Erro ao processar favoritos kkk. Tenta de novo!");
       }

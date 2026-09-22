@@ -1,4 +1,4 @@
-import { Sparkles, ArrowRight, MapPin } from "lucide-react";
+import { ArrowRight, MapPin } from "lucide-react";
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import { useState } from "react";
@@ -28,7 +28,7 @@ const CTABanner = () => {
             {/* Icon */}
             <div className="relative z-10 flex justify-center mb-6">
               <div className="w-16 h-16 rounded-2xl bg-white/10 backdrop-blur-sm border border-white/15 flex items-center justify-center">
-                <Sparkles size={28} className="text-amber-400" />
+                <MapPin size={28} className="text-amber-400" />
               </div>
             </div>
 

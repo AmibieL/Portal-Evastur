@@ -64,8 +64,8 @@ const ClientTripDetails = () => {
     );
   }
 
-  const pkg = (reservation as any).packages;
-  const itinerary = ((pkg?.package_itinerary_days) || []).sort((a: any, b: any) => a.day_number - b.day_number);
+  const pkg = reservation.packages;
+  const itinerary = [...(pkg?.package_itinerary_days || [])].sort((a, b) => a.day_number - b.day_number);
   const sc = statusConfig[reservation.status] || { label: reservation.status, color: "" };
 
   const whatsappMsg = encodeURIComponent(
@@ -143,7 +143,7 @@ const ClientTripDetails = () => {
                     Roteiro
                   </h3>
                   <div className="space-y-4">
-                    {itinerary.map((day: any) => (
+                    {itinerary.map((day) => (
                       <div key={day.day_number} className="flex gap-4">
                         <div className="w-8 h-8 rounded-lg bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold flex-shrink-0">
                           {day.day_number}

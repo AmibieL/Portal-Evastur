@@ -21,6 +21,7 @@ interface DestinationCardProps {
   category?: string;
   id?: string; // Adicionando ID opcional para favoritar
   status?: string; // "ativo" | "esgotado" etc
+  appearance?: "default" | "editorial";
 }
 
 // Labels humanizadas para as categorias (usadas na badge)
@@ -56,17 +57,19 @@ const DestinationCard = ({
   category,
   id,
   status,
+  appearance = "default",
 }: DestinationCardProps) => {
   const { isFavorite, toggleFavorite } = useFavorite(id);
   const isSoldOut = status === "esgotado";
+  const isEditorial = appearance === "editorial";
 
   return (
     <div className="relative">
       <Link to={`/pacote/${slug || "rio-croa"}`} className="block group">
         <motion.article
-          className="relative rounded-2xl overflow-hidden cursor-pointer bg-card"
+          className={`relative overflow-hidden cursor-pointer bg-card ${isEditorial ? "border border-slate-200" : "rounded-2xl"}`}
           whileHover="hover"
-          style={{ boxShadow: "0 4px 24px rgba(0,0,0,0.08)" }}
+          style={{ boxShadow: isEditorial ? "0 16px 40px -32px rgba(2, 11, 43, 0.45)" : "0 4px 24px rgba(0,0,0,0.08)" }}
           variants={{
             hover: {
               y: -4,
@@ -76,7 +79,7 @@ const DestinationCard = ({
           transition={{ duration: 0.35, ease: [0.25, 0, 0.2, 1] }}
         >
           {/* CONTAINER DA IMAGEM */}
-          <div className="relative aspect-[4/3] overflow-hidden">
+          <div className={`relative overflow-hidden ${isEditorial ? "aspect-[5/4]" : "aspect-[4/3]"}`}>
             <motion.img
               src={image}
               alt={title}
@@ -91,12 +94,7 @@ const DestinationCard = ({
             {/* Badge de Categoria (Nacional/Inter/Cruzeiro) */}
             {category && (
               <div className="absolute top-3 left-3 z-10">
-                <span
-                  className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold border backdrop-blur-sm ${
-                    categoryColor[category] ||
-                    "bg-white/20 text-white border-white/30"
-                  }`}
-                >
+                <span className={`inline-flex items-center px-2.5 py-1 text-xs font-semibold border backdrop-blur-sm ${isEditorial ? "rounded-none bg-slate-950/70 text-white border-white/20" : `rounded-full ${categoryColor[category] || "bg-white/20 text-white border-white/30"}`}`}>
                   {categoryLabel[category] || category}
                 </span>
               </div>
@@ -104,7 +102,7 @@ const DestinationCard = ({
 
             {/* Pill de Localização (ex: "Amazonas, Brasil") */}
             <div className="absolute bottom-3 left-3 z-10">
-              <div className="inline-flex items-center gap-1.5 bg-black/40 backdrop-blur-sm px-2.5 py-1 rounded-full">
+              <div className={`inline-flex items-center gap-1.5 bg-black/40 backdrop-blur-sm px-2.5 py-1 ${isEditorial ? "rounded-none" : "rounded-full"}`}>
                 <MapPin size={11} className="text-white/80" />
                 <span className="text-white/90 text-xs font-medium">{location}</span>
               </div>
@@ -112,9 +110,9 @@ const DestinationCard = ({
           </div>
 
           {/* CONTEÚDO DO CARD */}
-          <div className="p-4">
+          <div className={isEditorial ? "p-5" : "p-4"}>
             {/* Título do Pacote */}
-            <h3 className="font-bold text-foreground text-base leading-snug mb-1.5 line-clamp-1 group-hover:text-primary transition-colors duration-200">
+            <h3 className={`${isEditorial ? "text-lg font-semibold tracking-[-0.02em]" : "text-base font-bold"} text-foreground leading-snug mb-1.5 line-clamp-1 group-hover:text-primary transition-colors duration-200`}>
               {title}
             </h3>
 
@@ -150,13 +148,13 @@ const DestinationCard = ({
 
               {/* Botão Visual de Ação */}
               {isSoldOut ? (
-                <span className="inline-flex items-center gap-1 text-xs font-semibold text-red-600 border border-red-200 rounded-xl px-3 py-1.5 bg-red-50">
+                <span className={`inline-flex items-center gap-1 text-xs font-semibold text-red-600 border border-red-200 px-3 py-1.5 bg-red-50 ${isEditorial ? "rounded-none" : "rounded-xl"}`}>
                   <Ban size={12} />
                   Esgotado
                 </span>
               ) : (
                 <motion.span
-                  className="inline-flex items-center gap-1 text-xs font-semibold text-accent border border-accent/30 rounded-xl px-3 py-1.5 bg-accent/5 group-hover:bg-accent group-hover:text-white transition-all duration-200"
+                  className={`inline-flex items-center gap-1 text-xs font-semibold text-accent border border-accent/30 px-3 py-1.5 bg-accent/5 group-hover:bg-accent group-hover:text-white transition-all duration-200 ${isEditorial ? "rounded-none" : "rounded-xl"}`}
                   variants={{ hover: { scale: 1.03 } }}
                 >
                   Ver pacote
@@ -173,7 +171,7 @@ const DestinationCard = ({
         <Button
           variant="ghost"
           size="icon"
-          className="h-9 w-9 rounded-full bg-white/10 backdrop-blur-sm border border-white/20 text-white hover:bg-white/20 hover:text-white group/fav transition-all"
+          className={`h-9 w-9 bg-white/10 backdrop-blur-sm border border-white/20 text-white hover:bg-white/20 hover:text-white group/fav transition-all ${isEditorial ? "rounded-none" : "rounded-full"}`}
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();

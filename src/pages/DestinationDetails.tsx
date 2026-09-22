@@ -2,7 +2,7 @@ import { useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { motion } from "framer-motion";
-import { ArrowLeft, MapPin, Car, Home, Coffee, Map, Eye, Camera, Star, Loader2, Ban } from "lucide-react";
+import { ArrowLeft, MapPin, Car, Home, Coffee, Map, Eye, Camera, Star, Loader2, Ban, Compass, Lightbulb, Route } from "lucide-react";
 import Navbar from "@/components/Navbar";
 
 const fadeUp = {
@@ -57,16 +57,55 @@ const DestinationDetails = () => {
     },
   });
 
+  const { data: highlights = [] } = useQuery({
+    queryKey: ["destination-highlights", destination?.id],
+    enabled: !!destination,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("destination_highlights")
+        .select("*")
+        .eq("destination_id", destination!.id)
+        .order("sort_order");
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const { data: destinationItinerary = [] } = useQuery({
+    queryKey: ["destination-itinerary", destination?.id],
+    enabled: !!destination,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("destination_itinerary_days")
+        .select("*")
+        .eq("destination_id", destination!.id)
+        .order("day_number");
+      if (error) throw error;
+      return data;
+    },
+  });
+
   const { data: packages = [] } = useQuery({
     queryKey: ["destination-packages", destination?.id],
     enabled: !!destination,
     queryFn: async () => {
+      const { data: relations, error: relationsError } = await supabase
+        .from("package_destinations")
+        .select("package_id")
+        .eq("destination_id", destination!.id)
+        .order("sort_order");
+      if (relationsError) throw relationsError;
+
+      const packageIds = relations.map((relation) => relation.package_id);
+      if (packageIds.length === 0) return [];
+
       const { data, error } = await supabase
         .from("packages")
         .select("*, package_inclusions(inclusion_key, label)")
-        .eq("destination_id", destination!.id)
+        .in("id", packageIds)
         .eq("active", true)
-        .in("status", ["ativo", "esgotado"])
+        .eq("publication_status", "published")
+        .in("sales_status", ["available", "sold_out"])
         .order("price");
       if (error) throw error;
       return data;
@@ -125,7 +164,7 @@ const DestinationDetails = () => {
           </motion.h1>
 
           <motion.p custom={2} variants={fadeUp} className="text-primary-foreground/80 text-lg sm:text-xl max-w-2xl mx-auto">
-            {destination.subtitle}
+            {destination.summary || destination.subtitle}
           </motion.p>
 
           <motion.div custom={3} variants={fadeUp} className="flex items-center justify-center gap-6 mt-8">
@@ -165,6 +204,29 @@ const DestinationDetails = () => {
         </section>
       )}
 
+      {/* Highlights */}
+      {highlights.length > 0 && (
+        <section className="pb-20">
+          <div className="container mx-auto px-4 lg:px-8">
+            <motion.div className="text-center mb-10" initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.3 }}>
+              <motion.div custom={0} variants={fadeUp} className="inline-flex items-center gap-2 text-accent text-sm font-semibold uppercase tracking-wider mb-3">
+                <Compass size={15} /> O que torna este lugar especial
+              </motion.div>
+              <motion.h2 custom={1} variants={fadeUp} className="text-3xl sm:text-4xl font-bold text-primary">Principais atrativos</motion.h2>
+            </motion.div>
+            <motion.div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.15 }}>
+              {highlights.map((highlight, index) => (
+                <motion.article key={highlight.id} custom={index} variants={fadeUp} className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+                  <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-accent/10 text-accent"><Compass size={18} /></div>
+                  <h3 className="font-semibold text-primary">{highlight.title}</h3>
+                  {highlight.description && <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{highlight.description}</p>}
+                </motion.article>
+              ))}
+            </motion.div>
+          </div>
+        </section>
+      )}
+
       {/* Gallery */}
       {gallery.length > 0 && (
         <section className="py-20 bg-secondary">
@@ -187,6 +249,53 @@ const DestinationDetails = () => {
                 </motion.div>
               ))}
             </motion.div>
+          </div>
+        </section>
+      )}
+
+      {/* Suggested itinerary */}
+      {destinationItinerary.length > 0 && (
+        <section className="py-20">
+          <div className="container mx-auto px-4 lg:px-8">
+            <motion.div className="mx-auto max-w-4xl" initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.15 }}>
+              <motion.div custom={0} variants={fadeUp} className="mb-10 text-center">
+                <div className="mb-3 inline-flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-accent"><Route size={15} />Explore com calma</div>
+                <h2 className="text-3xl font-bold text-primary sm:text-4xl">Roteiro sugerido</h2>
+              </motion.div>
+              <div className="space-y-4">
+                {destinationItinerary.map((day, index) => (
+                  <motion.article key={day.id} custom={index + 1} variants={fadeUp} className="flex gap-4 rounded-2xl border border-border bg-card p-5 shadow-sm">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary text-sm font-bold text-primary-foreground">{day.day_number}</div>
+                    <div>
+                      <h3 className="font-semibold text-primary">{day.title}</h3>
+                      {day.description && <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">{day.description}</p>}
+                    </div>
+                  </motion.article>
+                ))}
+              </div>
+            </motion.div>
+          </div>
+        </section>
+      )}
+
+      {/* Access and recommendations */}
+      {(destination.access_info || destination.recommendations) && (
+        <section className="bg-secondary py-20">
+          <div className="container mx-auto grid gap-5 px-4 lg:grid-cols-2 lg:px-8">
+            {destination.access_info && (
+              <article className="rounded-2xl bg-card p-7 shadow-sm">
+                <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary"><MapPin size={18} /></div>
+                <h2 className="text-xl font-bold text-primary">Como chegar</h2>
+                <p className="mt-3 whitespace-pre-wrap leading-relaxed text-muted-foreground">{destination.access_info}</p>
+              </article>
+            )}
+            {destination.recommendations && (
+              <article className="rounded-2xl bg-card p-7 shadow-sm">
+                <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-amber-100 text-amber-700"><Lightbulb size={18} /></div>
+                <h2 className="text-xl font-bold text-primary">Recomendações</h2>
+                <p className="mt-3 whitespace-pre-wrap leading-relaxed text-muted-foreground">{destination.recommendations}</p>
+              </article>
+            )}
           </div>
         </section>
       )}
@@ -221,7 +330,7 @@ const DestinationDetails = () => {
                   <div className="p-5">
                     <h4 className="font-bold text-primary text-lg mb-3">{pkg.title}</h4>
                     <div className="grid grid-cols-2 gap-2 mb-5">
-                      {((pkg as any).package_inclusions || []).slice(0, 4).map((inc: any) => {
+                      {(pkg.package_inclusions || []).slice(0, 4).map((inc) => {
                         const IconComp = inclusionIcons[inc.inclusion_key] || Map;
                         return (
                           <div key={inc.inclusion_key} className="flex items-center gap-2 text-muted-foreground text-sm">

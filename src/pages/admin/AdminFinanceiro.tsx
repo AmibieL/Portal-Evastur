@@ -61,9 +61,9 @@ export default function AdminFinanceiro() {
     },
   });
 
-  const totalRevenue = (paidReservations as any[]).reduce((sum, r) => sum + Number(r.total_price), 0);
+  const totalRevenue = paidReservations.reduce((sum, reservation) => sum + Number(reservation.total_price), 0);
   const avgTicket = paidReservations.length > 0 ? totalRevenue / paidReservations.length : 0;
-  const cancelledCount = (allReservations as any[]).filter(r => r.status === "cancelado").length;
+  const cancelledCount = allReservations.filter((reservation) => reservation.status === "cancelado").length;
 
   const stats = [
     {
@@ -151,7 +151,7 @@ export default function AdminFinanceiro() {
               <CardTitle className="text-base">Reservas Confirmadas e Pagas</CardTitle>
             </CardHeader>
             <CardContent className="p-0">
-              {(paidReservations as any[]).length > 0 ? (
+              {paidReservations.length > 0 ? (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
@@ -166,7 +166,7 @@ export default function AdminFinanceiro() {
                       </tr>
                     </thead>
                     <tbody className="divide-y">
-                      {(paidReservations as any[]).map((r) => (
+                      {paidReservations.map((r) => (
                         <tr key={r.id} className="hover:bg-muted/30 transition-colors">
                           <td className="px-4 py-3 font-mono text-xs">{r.order_id || "—"}</td>
                           <td className="px-4 py-3">
@@ -217,7 +217,7 @@ export default function AdminFinanceiro() {
               </p>
             </CardHeader>
             <CardContent className="p-0">
-              {(pendingReservations as any[]).length > 0 ? (
+              {pendingReservations.length > 0 ? (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
@@ -231,7 +231,7 @@ export default function AdminFinanceiro() {
                       </tr>
                     </thead>
                     <tbody className="divide-y">
-                      {(pendingReservations as any[]).map((r: any) => (
+                      {pendingReservations.map((r) => (
                         <tr key={r.id} className="hover:bg-amber-50/30 transition-colors">
                           <td className="px-4 py-3 font-mono text-xs">{r.order_id}</td>
                           <td className="px-4 py-3">

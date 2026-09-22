@@ -2,7 +2,7 @@ import {
   Globe2,
   Building2,
   Crown,
-  Sparkles,
+  Route,
   Heart,
   Clock,
   Rocket,
@@ -53,7 +53,7 @@ const timelineItems: TimelineItem[] = [
     year: "2015",
     title: "Roteiros autorais",
     description: "Experiências culturais, gastronômicas e vivências locais com curadoria própria EVASTUR.",
-    icon: <Sparkles size={20} />,
+    icon: <Route size={20} />,
     accent: "hsl(330 75% 55%)",
   },
   {

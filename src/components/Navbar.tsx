@@ -4,7 +4,7 @@
  * Juan, este componente aparece em TODAS as páginas do site.
  *
  * FUNCIONALIDADES:
- * - Logo + links de navegação (Início, Destinos, Sobre, Contato)
+ * - Logo + links de navegação (Início, Pacotes, Sobre, Contato)
  * - Botão de carrinho com contador de itens (só se logado)
  * - Menu do usuário com avatar (dropdown desktop, sheet mobile)
  * - Links rápidos: Meu Perfil, Minhas Viagens, Favoritos, Carrinho
@@ -17,7 +17,7 @@
  * - O contador de itens vem via query "cart-count"
  */
 import { useState } from "react";
-import { Home, MapPin, Info, LogIn, Menu, X, LogOut, User as UserIcon, ShoppingCart, Plane, Heart, Headphones } from "lucide-react";
+import { Home, Info, LogIn, Menu, X, LogOut, User as UserIcon, ShoppingCart, Plane, Heart, Headphones } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link, useLocation } from "react-router-dom";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -40,7 +40,7 @@ const Navbar = () => {
   const { user, profile, signOut } = useAuth();
   const [isCartOpen, setIsCartOpen] = useState(false);
   const isHome = location.pathname === "/";
-  const isDestinos = location.pathname === "/destinos";
+  const isDestinos = ["/destinos", "/cruzeiro-do-sul"].includes(location.pathname);
 
   const { data: cartCount = 0 } = useQuery({
     queryKey: ["cart-count", user?.id],
@@ -62,7 +62,7 @@ const Navbar = () => {
 
   const navLinks = [
     { to: "/", label: "Início", icon: Home, active: isHome },
-    { to: "/destinos", label: "Destinos", icon: MapPin, active: isDestinos },
+    { to: "/destinos", label: "Pacotes", icon: Plane, active: isDestinos },
     { to: "/sobre", label: "Sobre nós", icon: Info, active: isAbout },
     { to: "/contato", label: "Contato", icon: Headphones, active: isContato },
   ];

@@ -42,7 +42,7 @@ const NewsletterUnsubscribe = () => {
         } else {
           setStatus("success");
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error("Unsubscribe error:", err);
         setStatus("error");
         setErrorMsg("Ocorreu um erro ao processar sua solicitação. Tente novamente.");

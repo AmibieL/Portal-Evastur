@@ -9,6 +9,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
+import { getCatalogDeleteErrorDescription } from "@/lib/catalogDeleteError";
 
 type PackageRow = {
   id: string;
@@ -19,12 +20,14 @@ type PackageRow = {
   status: string;
   active: boolean;
   cover_image_url: string | null;
-  destination_name?: string | null;
-  destinations?: { name: string } | null;
+  destination_name: string | null;
   created_at: string;
   total_slots?: number | null;
   available_slots?: number | null;
+  package_type: string;
 };
+
+type PackageType = "external" | "regional";
 
 const categoryConfig: Record<string, { label: string; color: string; dot: string }> = {
   interno: { label: "Regional", color: "text-emerald-700 bg-emerald-50 border-emerald-200", dot: "bg-emerald-500" },
@@ -39,19 +42,25 @@ const statusConfig: Record<string, { label: string; color: string }> = {
   esgotado: { label: "Esgotado", color: "text-red-700 bg-red-50 border-red-200" },
 };
 
-export default function AdminPacotes() {
+export default function AdminPacotes({ packageType }: { packageType?: PackageType }) {
   const [search, setSearch] = useState("");
   const [filterCat, setFilterCat] = useState<string>("todos");
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const { data: packages = [], isLoading } = useQuery({
-    queryKey: ["admin-packages"],
+    queryKey: ["admin-packages", packageType || "all"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from("packages")
-        .select("*, destinations(name)")
+        .select("*")
         .order("created_at", { ascending: false });
+
+      if (packageType) {
+        query = query.eq("package_type", packageType);
+      }
+
+      const { data, error } = await query;
       if (error) throw error;
       return data as PackageRow[];
     },
@@ -77,14 +86,20 @@ export default function AdminPacotes() {
       queryClient.invalidateQueries({ queryKey: ["admin-packages"] });
       toast({ title: "Pacote excluído." });
     },
-    onError: (err: Error) =>
-      toast({ title: "Erro ao excluir", description: err.message, variant: "destructive" }),
+    onError: (error) => {
+      console.error("Erro ao excluir pacote:", error);
+      toast({
+        title: "Erro ao excluir pacote",
+        description: getCatalogDeleteErrorDescription(error, "package"),
+        variant: "destructive",
+      });
+    },
   });
 
   const filtered = packages.filter((p) => {
     const matchSearch =
       p.title.toLowerCase().includes(search.toLowerCase()) ||
-      (p.destination_name || p.destinations?.name || "").toLowerCase().includes(search.toLowerCase());
+      (p.destination_name || "").toLowerCase().includes(search.toLowerCase());
     const matchCat = filterCat === "todos" || p.category === filterCat;
     return matchSearch && matchCat;
   });
@@ -96,6 +111,28 @@ export default function AdminPacotes() {
     sold: packages.filter((p) => p.status === "esgotado").length,
   };
 
+  const pageTitle = packageType === "external"
+    ? "Pacotes externos"
+    : packageType === "regional"
+      ? "Experiências regionais"
+      : "Gerenciar Pacotes";
+
+  const pageDescription = packageType === "external"
+    ? "Viagens com saída do Acre para destinos nacionais e internacionais"
+    : packageType === "regional"
+      ? "Passeios e experiências de turismo dentro do Acre"
+      : "Todos os produtos turísticos cadastrados";
+
+  const newPackagePath = packageType === "regional"
+    ? "/admin/pacotes/regionais/novo"
+    : "/admin/pacotes/externos/novo";
+
+  const availableCategories = packageType === "regional"
+    ? ["todos", "interno"]
+    : packageType === "external"
+      ? ["todos", "nacional", "internacional", "cruzeiro"]
+      : ["todos", "interno", "nacional", "internacional", "cruzeiro"];
+
   return (
     <div>
       {/* Page header */}
@@ -104,11 +141,12 @@ export default function AdminPacotes() {
           <p className="text-xs text-muted-foreground font-medium uppercase tracking-widest mb-0.5">
             Admin / Pacotes
           </p>
-          <h1 className="text-2xl font-bold text-foreground">Gerenciar Pacotes</h1>
+          <h1 className="text-2xl font-bold text-foreground">{pageTitle}</h1>
+          <p className="text-sm text-muted-foreground mt-1">{pageDescription}</p>
         </div>
         <Button asChild className="gap-2 h-10 px-5" style={{ background: "linear-gradient(135deg, hsl(232 100% 23%), hsl(232 100% 30%))" }}>
-          <Link to="/admin/pacotes/novo">
-            <Plus size={16} /> Novo Pacote
+          <Link to={newPackagePath}>
+            <Plus size={16} /> {packageType === "regional" ? "Nova Experiência" : "Novo Pacote"}
           </Link>
         </Button>
       </div>
@@ -141,7 +179,7 @@ export default function AdminPacotes() {
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <Filter size={15} className="text-muted-foreground" />
-          {["todos", "interno", "nacional", "internacional", "cruzeiro"].map((cat) => (
+          {availableCategories.map((cat) => (
             <button
               key={cat}
               onClick={() => setFilterCat(cat)}
@@ -177,7 +215,7 @@ export default function AdminPacotes() {
           {filtered.map((pkg) => {
             const cat = categoryConfig[pkg.category] || categoryConfig.interno;
             const st = statusConfig[pkg.status] || statusConfig.ativo;
-            const destName = (pkg as any).destination_name || pkg.destinations?.name || null;
+            const destName = pkg.destination_name;
 
             return (
               <div
@@ -260,7 +298,9 @@ export default function AdminPacotes() {
 
                   {/* Edit */}
                   <Link
-                    to={`/admin/pacotes/${pkg.id}/editar`}
+                    to={pkg.package_type === "regional"
+                      ? `/admin/pacotes/regionais/${pkg.id}/editar`
+                      : `/admin/pacotes/externos/${pkg.id}/editar`}
                     className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
                   >
                     <Pencil size={15} />

@@ -1,4 +1,4 @@
-import { Sparkles, Instagram, CheckCircle2, ArrowRight, ExternalLink } from "lucide-react";
+import { Instagram, CheckCircle2, ArrowRight, ExternalLink } from "lucide-react";
 import { motion } from "framer-motion";
 
 const features = [
@@ -34,7 +34,7 @@ const InstagramSection = () => {
               transition={{ duration: 0.4 }}
               className="inline-flex items-center gap-2 bg-pink-500/15 border border-pink-500/20 px-4 py-2 rounded-full mb-6"
             >
-              <Sparkles size={14} className="text-pink-400" />
+              <Instagram size={14} className="text-pink-400" />
               <span className="text-pink-300 text-sm font-medium">Novidades em tempo real</span>
             </motion.div>
 

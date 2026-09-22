@@ -1,17 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { motion } from "framer-motion";
 import { Anchor, Loader2 } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
-import DestinationCard from "@/components/DestinationCard";
 
-const cardVariants = {
-  hidden: { opacity: 0, y: 24 },
-  visible: (i: number) => ({
-    opacity: 1,
-    y: 0,
-    transition: { delay: i * 0.08, duration: 0.42, ease: [0.25, 0, 0.2, 1] as const },
-  }),
-};
+import DestinationCard from "@/components/DestinationCard";
+import { supabase } from "@/integrations/supabase/client";
 
 const CruiseCarousel = () => {
   const { data: packages = [], isLoading } = useQuery({
@@ -19,7 +11,7 @@ const CruiseCarousel = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("packages")
-        .select("*, destinations(name)")
+        .select("*")
         .eq("active", true)
         .in("status", ["ativo", "esgotado"])
         .eq("category", "cruzeiro")
@@ -33,85 +25,69 @@ const CruiseCarousel = () => {
   if (!isLoading && packages.length === 0) return null;
 
   return (
-    <section className="py-20 lg:py-28 bg-background relative overflow-hidden">
-      {/* Dark navy wave background strip */}
-      <div
-        aria-hidden
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          background:
-            "radial-gradient(ellipse 90% 50% at 70% 30%, hsl(225 76% 49% / 0.06) 0%, transparent 65%)",
-        }}
-      />
-
-      <div className="container mx-auto px-4 lg:px-8">
-        {/* Header */}
+    <section id="cruzeiros" className="scroll-mt-20 overflow-hidden bg-[#071440] py-20 text-white sm:py-24 lg:py-28">
+      <div className="container mx-auto px-5 lg:px-8">
         <motion.div
-          initial={{ opacity: 0, y: 24 }}
+          initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: "-60px" }}
           transition={{ duration: 0.5 }}
-          className="mb-14"
+          className="mb-12 grid gap-6 border-b border-white/15 pb-9 lg:grid-cols-[1fr_0.65fr] lg:items-end"
         >
-          <div className="flex items-center gap-3 mb-4">
-            <div
-              className="w-10 h-10 rounded-xl flex items-center justify-center"
-              style={{ background: "hsl(225 76% 49% / 0.12)" }}
-            >
-              <Anchor size={18} style={{ color: "hsl(225 76% 49%)" }} />
-            </div>
-            <span
-              className="text-xs font-semibold uppercase tracking-widest"
-              style={{ color: "hsl(225 76% 49%)" }}
-            >
-              Temporada de Cruzeiros
-            </span>
+          <div>
+            <p className="mb-4 flex items-center gap-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-white/60">
+              <Anchor size={15} strokeWidth={1.6} /> Temporada de cruzeiros
+            </p>
+            <h2 className="max-w-3xl text-4xl font-semibold leading-[1.04] tracking-[-0.045em] sm:text-5xl lg:text-6xl">
+              Novos horizontes, vistos do mar
+            </h2>
           </div>
-          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-foreground leading-tight max-w-2xl">
-            Navegue pelos rios e mares{" "}
-            <span className="text-primary">mais fascinantes do mundo</span>
-          </h2>
-          <p className="text-muted-foreground text-sm mt-3 max-w-lg leading-relaxed">
-            De expedições fluviais na Amazônia a navios transatlânticos luxuosos — descubra a magia de viajar sobre as águas.
+          <p className="max-w-xl text-sm leading-relaxed text-white/65 lg:justify-self-end">
+            De expedições fluviais a travessias internacionais, selecionamos viagens para quem quer descobrir o percurso tanto quanto o destino.
           </p>
         </motion.div>
 
-        {/* Grid */}
         {isLoading ? (
           <div className="flex justify-center py-20">
-            <Loader2
-              className="animate-spin"
-              size={36}
-              strokeWidth={1.5}
-              style={{ color: "hsl(225 76% 49% / 0.4)" }}
-            />
+            <Loader2 className="animate-spin text-white/40" size={34} strokeWidth={1.5} />
           </div>
         ) : (
-          <AnimatePresence>
-            <motion.div
-              initial="hidden"
-              whileInView="visible"
-              viewport={{ once: true, margin: "-40px" }}
-              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5"
-            >
-              {packages.map((pkg, i) => (
-                <motion.div key={pkg.id} custom={i} variants={cardVariants}>
-                  <DestinationCard
-                    image={pkg.cover_image_url || ""}
-                    title={pkg.title}
-                    location={(pkg.destinations as any)?.name || "Cruzeiro"}
-                    description={pkg.short_description || ""}
-                    installments={pkg.installments || 10}
-                    installmentValue={Math.round(pkg.price / (pkg.installments || 10))}
-                    totalPrice={pkg.price}
-                    slug={pkg.slug}
-                    category={pkg.category}
-                    status={pkg.status}
-                  />
-                </motion.div>
-              ))}
-            </motion.div>
-          </AnimatePresence>
+          <motion.div
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true, margin: "-40px" }}
+            className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+          >
+            {packages.map((pkg, index) => (
+              <motion.div
+                key={pkg.id}
+                custom={index}
+                variants={{
+                  hidden: { opacity: 0, y: 20 },
+                  visible: (itemIndex: number) => ({
+                    opacity: 1,
+                    y: 0,
+                    transition: { delay: itemIndex * 0.07, duration: 0.42 },
+                  }),
+                }}
+              >
+                <DestinationCard
+                  id={pkg.id}
+                  image={pkg.cover_image_url || ""}
+                  title={pkg.title}
+                  location={pkg.destination_name || "Cruzeiro"}
+                  description={pkg.short_description || ""}
+                  installments={pkg.installments || 10}
+                  installmentValue={Math.round(pkg.price / (pkg.installments || 10))}
+                  totalPrice={pkg.price}
+                  slug={pkg.slug}
+                  category={pkg.category}
+                  status={pkg.status}
+                  appearance="editorial"
+                />
+              </motion.div>
+            ))}
+          </motion.div>
         )}
       </div>
     </section>

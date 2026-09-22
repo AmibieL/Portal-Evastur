@@ -1,112 +1,138 @@
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-import { Sparkles, Loader2, ArrowRight } from "lucide-react";
-import { Link } from "react-router-dom";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
+import { Loader2, Map } from "lucide-react";
+
 import DestinationCard from "@/components/DestinationCard";
+import { supabase } from "@/integrations/supabase/client";
+
+type PackageFilter = "todos" | "nacional" | "internacional";
 
 const cardVariants = {
-  hidden: { opacity: 0, y: 24 },
-  visible: (i: number) => ({
+  hidden: { opacity: 0, y: 20 },
+  visible: (index: number) => ({
     opacity: 1,
     y: 0,
-    transition: { delay: i * 0.07, duration: 0.4, ease: [0.25, 0, 0.2, 1] as const },
+    transition: { delay: index * 0.06, duration: 0.42, ease: [0.25, 0, 0.2, 1] as const },
   }),
 };
 
 const DestinationsCarousel = () => {
-  const { data: packages = [], isLoading } = useQuery({
+  const [activeFilter, setActiveFilter] = useState<PackageFilter>("todos");
+  const { data: packages = [], isLoading, isError } = useQuery({
     queryKey: ["carousel-packages"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("packages")
-        .select("*, destinations(name)")
+        .select("*")
         .eq("active", true)
         .in("status", ["ativo", "esgotado"])
         .in("category", ["nacional", "internacional"])
         .order("created_at", { ascending: false })
-        .limit(8);
+        .limit(12);
       if (error) throw error;
       return data;
     },
   });
 
-  return (
-    <section className="py-20 lg:py-28 bg-secondary/40 relative overflow-hidden">
-      {/* Background texture */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0"
-        style={{
-          background:
-            "radial-gradient(ellipse 70% 60% at 30% 60%, hsl(232 100% 23% / 0.04) 0%, transparent 70%)",
-        }}
-      />
+  const counts = useMemo(
+    () => ({
+      nacional: packages.filter((item) => item.category === "nacional").length,
+      internacional: packages.filter((item) => item.category === "internacional").length,
+    }),
+    [packages],
+  );
 
-      <div className="container mx-auto px-4 lg:px-8">
-        {/* Header */}
+  const visiblePackages = useMemo(
+    () => activeFilter === "todos" ? packages : packages.filter((item) => item.category === activeFilter),
+    [activeFilter, packages],
+  );
+
+  const filters = [
+    { id: "todos" as const, label: "Todos" },
+    ...(counts.nacional > 0 ? [{ id: "nacional" as const, label: "Brasil" }] : []),
+    ...(counts.internacional > 0 ? [{ id: "internacional" as const, label: "Internacionais" }] : []),
+  ];
+
+  return (
+    <section id="pacotes" className="scroll-mt-20 bg-white py-20 sm:py-24 lg:py-28">
+      <div className="container mx-auto px-5 lg:px-8">
         <motion.div
-          initial={{ opacity: 0, y: 24 }}
+          initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: "-60px" }}
           transition={{ duration: 0.5 }}
-          className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-6 mb-14"
+          className="mb-11 grid gap-8 border-b border-slate-200 pb-9 lg:grid-cols-[1fr_auto] lg:items-end"
         >
-          <div className="max-w-xl">
-            <span className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-accent mb-3">
-              <Sparkles size={13} />
-              Seleção Cinematográfica
-            </span>
-            <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-foreground leading-tight">
-              Destinos que brilham{" "}
-              <span className="text-primary">na vitrine Evastur</span>
+          <div className="max-w-3xl">
+            <p className="mb-4 flex items-center gap-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-[#d50030]">
+              <Map size={15} strokeWidth={1.6} /> Curadoria Evastur
+            </p>
+            <h2 className="text-4xl font-semibold leading-[1.04] tracking-[-0.045em] text-primary sm:text-5xl lg:text-6xl">
+              Viagens pelo Brasil e pelo mundo
             </h2>
-            <p className="text-muted-foreground text-sm mt-3 leading-relaxed max-w-md">
-              Explore fotos em alta resolução, valores atualizados e detalhes de cada experiência.
+            <p className="mt-5 max-w-2xl text-base leading-relaxed text-slate-600">
+              Pacotes completos com datas, hospedagem e condições apresentadas de forma clara para você escolher com segurança.
             </p>
           </div>
 
-          <Link
-            to="/destinos"
-            className="inline-flex items-center gap-2 text-sm font-semibold text-primary hover:text-accent transition-colors group shrink-0"
-          >
-            Ver todos
-            <ArrowRight size={15} className="group-hover:translate-x-1 transition-transform" />
-          </Link>
+          {!isLoading && packages.length > 0 && (
+            <div className="flex flex-wrap gap-1 border-b border-slate-300" aria-label="Filtrar pacotes por categoria">
+              {filters.map((filter) => (
+                <button
+                  key={filter.id}
+                  type="button"
+                  onClick={() => setActiveFilter(filter.id)}
+                  className={`relative px-4 py-3 text-sm font-medium transition-colors ${
+                    activeFilter === filter.id ? "text-primary" : "text-slate-500 hover:text-slate-900"
+                  }`}
+                >
+                  {filter.label}
+                  {activeFilter === filter.id && <span className="absolute inset-x-0 -bottom-px h-0.5 bg-[#d50030]" />}
+                </button>
+              ))}
+            </div>
+          )}
         </motion.div>
 
-        {/* Grid */}
         {isLoading ? (
           <div className="flex justify-center py-20">
-            <Loader2 className="animate-spin text-primary/30" size={36} strokeWidth={1.5} />
+            <Loader2 className="animate-spin text-primary/35" size={34} strokeWidth={1.5} />
           </div>
+        ) : isError ? (
+          <p className="border border-slate-200 py-12 text-center text-sm text-slate-500">
+            Não foi possível carregar os pacotes agora. Tente novamente em instantes.
+          </p>
+        ) : visiblePackages.length === 0 ? (
+          <p className="border border-slate-200 py-12 text-center text-sm text-slate-500">
+            Novos roteiros serão publicados em breve.
+          </p>
         ) : (
-          <AnimatePresence>
-            <motion.div
-              initial="hidden"
-              whileInView="visible"
-              viewport={{ once: true, margin: "-40px" }}
-              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5"
-            >
-              {packages.map((pkg, i) => (
-                <motion.div key={pkg.id} custom={i} variants={cardVariants}>
-                  <DestinationCard
-                    id={pkg.id}
-                    image={pkg.cover_image_url || ""}
-                    title={pkg.title}
-                    location={(pkg.destinations as any)?.name || ""}
-                    description={pkg.short_description || ""}
-                    installments={pkg.installments || 10}
-                    installmentValue={Math.round(pkg.price / (pkg.installments || 10))}
-                    totalPrice={pkg.price}
-                    slug={pkg.slug}
-                    category={pkg.category}
-                    status={pkg.status}
-                  />
-                </motion.div>
-              ))}
-            </motion.div>
-          </AnimatePresence>
+          <motion.div
+            key={activeFilter}
+            initial="hidden"
+            animate="visible"
+            className="grid grid-cols-1 gap-x-6 gap-y-10 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+          >
+            {visiblePackages.map((pkg, index) => (
+              <motion.div key={pkg.id} custom={index} variants={cardVariants}>
+                <DestinationCard
+                  id={pkg.id}
+                  image={pkg.cover_image_url || ""}
+                  title={pkg.title}
+                  location={pkg.destination_name || ""}
+                  description={pkg.short_description || ""}
+                  installments={pkg.installments || 10}
+                  installmentValue={Math.round(pkg.price / (pkg.installments || 10))}
+                  totalPrice={pkg.price}
+                  slug={pkg.slug}
+                  category={pkg.category}
+                  status={pkg.status}
+                  appearance="editorial"
+                />
+              </motion.div>
+            ))}
+          </motion.div>
         )}
       </div>
     </section>

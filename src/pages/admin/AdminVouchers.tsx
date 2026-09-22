@@ -56,10 +56,22 @@ interface Voucher {
   total_price: number;
   package_duration: string | null;
   package_inclusions: string[];
-  occupants: any[] | null;
-  route_info: any | null;
+  occupants: VoucherOccupant[] | null;
+  route_info: VoucherRouteInfo | null;
   status: string;
   created_at: string;
+}
+
+interface VoucherOccupant {
+  name?: string;
+  cpf?: string;
+  birth_date?: string;
+  is_infant?: boolean;
+}
+
+interface VoucherRouteInfo {
+  departure?: { from?: string; to?: string; date?: string; time?: string };
+  return?: { from?: string; to?: string; date?: string; time?: string };
 }
 
 function formatCurrency(value: number): string {
@@ -198,7 +210,7 @@ function generateVoucherHTML(voucher: Voucher): string {
       ${(() => {
         const occupants = voucher.occupants || [];
         if (occupants.length === 0) return '';
-        const occupantsRows = occupants.map((occ: any, idx: number) => {
+        const occupantsRows = occupants.map((occ, idx) => {
           const type = occ.is_infant ? '🍼 Colo (grátis)' : 'Passageiro';
           const birthFormatted = occ.birth_date
             ? new Date(occ.birth_date + 'T12:00:00').toLocaleDateString('pt-BR')

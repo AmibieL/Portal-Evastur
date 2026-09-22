@@ -14,12 +14,12 @@
  *
  * TABELA: reservations
  * STATUS POSSÍVEIS: novo, aguardando, confirmado, cancelado
- * CAMPO IMPORTANTE: travel_date → vem do pacote (admin define) ou do cliente (pacote interno)
+ * CAMPO IMPORTANTE: travel_date → vem da agenda fixa definida pelo admin no pacote
  */
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import type { Tables } from "@/integrations/supabase/types";
+import type { Json, Tables } from "@/integrations/supabase/types";
 import {
   Search, Eye, MessageCircle, Loader2, FileText, Baby
 } from "lucide-react";
@@ -35,7 +35,18 @@ import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter,
 } from "@/components/ui/sheet";
 
-type Reservation = Tables<"reservations"> & { payment_status?: string; occupants?: any[] | null };
+type Occupant = {
+  name?: string;
+  cpf?: string;
+  birth_date?: string;
+  is_infant?: boolean;
+};
+
+function reservationOccupants(value: Json | null) {
+  return Array.isArray(value) ? value as unknown as Occupant[] : [];
+}
+
+type Reservation = Tables<"reservations">;
 type ReservationStatus = "novo" | "aguardando" | "confirmado" | "cancelado";
 
 const statusConfig: Record<string, { label: string; color: string }> = {
@@ -328,10 +339,10 @@ export default function AdminReservations() {
 
                 {/* Occupants / Passageiros */}
                 {(() => {
-                  const occupants = Array.isArray((selected as any).occupants) ? (selected as any).occupants as any[] : [];
+                  const occupants = reservationOccupants(selected.occupants);
                   if (occupants.length === 0) return null;
-                  const paying = occupants.filter((o: any) => !o.is_infant);
-                  const infants = occupants.filter((o: any) => o.is_infant);
+                  const paying = occupants.filter((occupant) => !occupant.is_infant);
+                  const infants = occupants.filter((occupant) => occupant.is_infant);
                   return (
                     <div className="space-y-3 p-4 border rounded-lg bg-sky-50/50 border-sky-200">
                       <h4 className="text-sm font-semibold flex items-center justify-between">
@@ -342,7 +353,7 @@ export default function AdminReservations() {
                         </span>
                       </h4>
                       <div className="space-y-2">
-                        {occupants.map((occ: any, idx: number) => (
+                        {occupants.map((occ, idx) => (
                           <div
                             key={idx}
                             className={`flex items-center gap-3 p-2.5 rounded-lg text-sm ${
@@ -356,7 +367,7 @@ export default function AdminReservations() {
                                 ? "bg-emerald-100 text-emerald-700"
                                 : "bg-sky-100 text-sky-700"
                             }`}>
-                              {occ.is_infant ? "🍼" : `#${occupants.slice(0, idx + 1).filter((o: any) => !o.is_infant).length}`}
+                              {occ.is_infant ? "🍼" : `#${occupants.slice(0, idx + 1).filter((occupant) => !occupant.is_infant).length}`}
                             </span>
                             <div className="flex-1 min-w-0">
                               <p className="font-medium truncate">{occ.name}</p>

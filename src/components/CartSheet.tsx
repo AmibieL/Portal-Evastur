@@ -30,6 +30,7 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ShoppingCart, Trash2, Plus, Minus, Loader2, PackageSearch } from "lucide-react";
 import { toast } from "sonner";
+import type { TablesUpdate } from "@/integrations/supabase/types";
 import { Link } from "react-router-dom";
 
 interface CartSheetProps {
@@ -63,7 +64,7 @@ export const CartSheet = ({ open, onOpenChange }: CartSheetProps) => {
 
   const updateQuantity = useMutation({
     mutationFn: async ({ id, quantity, people }: { id: string; quantity?: number; people?: number }) => {
-      const updates: any = {};
+      const updates: TablesUpdate<"cart_items"> = {};
       if (quantity !== undefined) updates.quantity = Math.max(1, quantity);
       if (people !== undefined) updates.people = Math.max(1, people);
 
@@ -102,7 +103,7 @@ export const CartSheet = ({ open, onOpenChange }: CartSheetProps) => {
   };
 
   const calculateTotal = () => {
-    return cartItems.reduce((total, item: any) => {
+    return cartItems.reduce((total, item) => {
       const price = item.package?.price || 0;
       return total + price * item.people;
     }, 0);
@@ -129,7 +130,7 @@ export const CartSheet = ({ open, onOpenChange }: CartSheetProps) => {
           ) : cartItems.length > 0 ? (
             <ScrollArea className="h-full">
               <div className="p-6 space-y-6">
-                {cartItems.map((item: any) => (
+                {cartItems.map((item) => (
                   <div key={item.id} className="flex gap-4 group">
                     <div className="w-20 h-20 rounded-lg overflow-hidden shrink-0 border">
                       <img 
@@ -185,7 +186,7 @@ export const CartSheet = ({ open, onOpenChange }: CartSheetProps) => {
                 <p className="text-sm text-muted-foreground/60">Explore nossos pacotes e escolha sua próxima aventura.</p>
               </div>
               <Button asChild variant="outline" onClick={() => onOpenChange(false)}>
-                <Link to="/destinos">Ver destinos</Link>
+                <Link to="/destinos">Ver pacotes</Link>
               </Button>
             </div>
           )}

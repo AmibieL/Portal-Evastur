@@ -7,7 +7,6 @@ import {
   MapPin,
   Clock,
   Send,
-  Sparkles,
   CheckCircle2,
   Loader2,
   ArrowRight,
@@ -166,7 +165,7 @@ export default function ContactPage() {
                   borderColor: "hsl(232 100% 23% / 0.15)",
                 }}
               >
-                <Sparkles size={14} />
+                <MessageCircle size={14} />
                 Concierge Evastur
               </span>
             </motion.div>
@@ -308,8 +307,7 @@ export default function ContactPage() {
                         onChange={handleChange}
                         placeholder="Como devemos chamá-lo(a)?"
                         required
-                        className="w-full px-4 py-3 rounded-xl border border-border bg-background text-foreground placeholder-muted-foreground/60 focus:outline-none focus:ring-2 text-sm transition-all"
-                        style={{ focusRingColor: "hsl(232 100% 23%)" } as any}
+                        className="w-full px-4 py-3 rounded-xl border border-border bg-background text-foreground placeholder-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm transition-all"
                       />
                     </div>
 

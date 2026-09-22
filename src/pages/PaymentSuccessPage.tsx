@@ -9,13 +9,14 @@ import { Card, CardContent } from "@/components/ui/card";
 import { CheckCircle2, Loader2, Package, ArrowRight, Phone } from "lucide-react";
 import { motion } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
+import type { Tables } from "@/integrations/supabase/types";
 
 const PaymentSuccessPage = () => {
   const [searchParams] = useSearchParams();
   const { user } = useAuth();
   // Support both Asaas redirect (?payment_id=) and legacy Stripe (?session_id=)
   const paymentId = searchParams.get("payment_id") || searchParams.get("session_id");
-  const [reservations, setReservations] = useState<any[]>([]);
+  const [reservations, setReservations] = useState<Tables<"reservations">[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {

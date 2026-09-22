@@ -9,7 +9,6 @@
  */
 
 import { createClient } from '@supabase/supabase-js';
-// @ts-ignore - Juan, se o TS reclamar, finge que não viu. Esses tipos do Supabase às vezes são temperamentais.
 import type { Database } from './types';
 
 /**

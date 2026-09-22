@@ -74,7 +74,7 @@ const DestinationsSection = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("packages")
-        .select("*, destinations(name)")
+        .select("*")
         .eq("active", true) // Apenas pacotes "ligados" (visíveis)
         .in("status", ["ativo", "esgotado"]) // Inclui pacotes ativos e esgotados
         .in("category", ["nacional", "internacional", "cruzeiro"]) // Filtra as categorias da Home
@@ -133,7 +133,7 @@ const DestinationsSection = () => {
                   className="block w-6 h-px"
                   style={{ background: "hsl(350 100% 45%)" }}
                 />
-                Coleção de destinos
+                Pacotes em destaque
               </span>
             </motion.div>
 
@@ -165,56 +165,31 @@ const DestinationsSection = () => {
               variants={headerVariants}
               className="mt-4 text-muted-foreground text-base leading-relaxed"
             >
-              Curadoria humana, destinos únicos. Explore nossas coleções e encontre a
+              Curadoria humana, roteiros únicos. Explore nossos pacotes e encontre a
               viagem perfeita para você.
             </motion.p>
           </div>
 
           {/* INDICADORES RÁPIDOS (Resumo de quantidades) */}
-          <motion.div
-            custom={3}
-            variants={headerVariants}
-            className="flex items-center gap-6 shrink-0"
-          >
-            <div className="text-center">
-              <p
-                className="text-3xl font-bold"
-                style={{ color: "hsl(232 100% 23%)" }}
-              >
-                {packages.length}
-              </p>
-              <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide mt-0.5">
-                Pacotes
-              </p>
-            </div>
-            <div
-              className="h-10 w-px"
-              style={{ background: "hsl(220 13% 91%)" }}
-            />
-            <div className="text-center">
-              <p className="text-3xl font-bold" style={{ color: "hsl(350 100% 45%)" }}>
-                {counts.internacional + counts.cruzeiro}
-              </p>
-              <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide mt-0.5">
-                Internacionais
-              </p>
-            </div>
-            <div
-              className="h-10 w-px"
-              style={{ background: "hsl(220 13% 91%)" }}
-            />
-            <div className="text-center">
-              <p
-                className="text-3xl font-bold"
-                style={{ color: "hsl(232 100% 23%)" }}
-              >
-                {counts.nacional}
-              </p>
-              <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide mt-0.5">
-                Nacionais
-              </p>
-            </div>
-          </motion.div>
+          {!isLoading && packages.length > 0 && (
+            <motion.div
+              custom={3}
+              variants={headerVariants}
+              className="flex items-center gap-6 shrink-0"
+            >
+              <div className="text-center">
+                <p
+                  className="text-3xl font-bold"
+                  style={{ color: "hsl(232 100% 23%)" }}
+                >
+                  {packages.length}
+                </p>
+                <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide mt-0.5">
+                  Pacotes
+                </p>
+              </div>
+            </motion.div>
+          )}
         </motion.div>
 
         {/* ── ABAS DE FILTRO ── */}
@@ -271,7 +246,7 @@ const DestinationsSection = () => {
               to="/destinos"
               className="inline-flex items-center gap-2 text-sm font-semibold text-primary hover:text-accent transition-colors duration-200 group"
             >
-              Ver todos os destinos
+              Ver todos os pacotes
               <ArrowRight
                 size={16}
                 className="group-hover:translate-x-1 transition-transform duration-200"
@@ -298,7 +273,7 @@ const DestinationsSection = () => {
               <Globe size={28} className="text-primary/40" />
             </div>
             <p className="text-muted-foreground text-sm">
-              Nenhum destino encontrado nesta categoria.
+              Nenhum pacote encontrado nesta categoria.
             </p>
           </div>
         ) : (
@@ -315,7 +290,7 @@ const DestinationsSection = () => {
                   <DestinationCard
                     image={pkg.cover_image_url || ""}
                     title={pkg.title}
-                    location={(pkg.destinations as any)?.name || ""}
+                    location={pkg.destination_name || ""}
                     description={pkg.short_description || ""}
                     installments={pkg.installments || 10}
                     installmentValue={Math.round(
@@ -349,7 +324,7 @@ const DestinationsSection = () => {
                   "linear-gradient(135deg, hsl(232 100% 23%) 0%, hsl(232 100% 30%) 100%)",
               }}
             >
-              Explorar todos os {packages.length} destinos
+              Explorar todos os {packages.length} pacotes
               <ArrowRight size={16} />
             </Link>
           </motion.div>

@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { User, Session } from "@supabase/supabase-js";
 
@@ -26,6 +26,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<{ role?: string; full_name?: string; avatar_url?: string } | null>(null);
   const [loading, setLoading] = useState(true);
+  const activeUserIdRef = useRef<string | null>(null);
 
   // Busca dados adicionais do usuário (como o cargo: admin ou cliente)
   const fetchProfile = async (userId: string) => {
@@ -50,6 +51,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     // 1. Checa se o cara já tem uma sessão guardada (cookies/localStorage)
     supabase.auth.getSession().then(({ data: { session } }) => {
+      activeUserIdRef.current = session?.user.id ?? null;
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
@@ -61,11 +63,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // 2. Fica de olho se o cara deslogar ou mudar de conta (o Supabase avisa a gente)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      const nextUserId = session?.user.id ?? null;
+      const userChanged = nextUserId !== activeUserIdRef.current;
+
+      activeUserIdRef.current = nextUserId;
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
-        setLoading(true); // Evita mostrar a tela errada enquanto busca o perfil
-        fetchProfile(session.user.id).finally(() => setLoading(false));
+        // TOKEN_REFRESHED e SIGNED_IN também podem ser emitidos quando a aba volta
+        // ao foco. Recarregar o perfil nesses eventos colocava o AdminLayout em
+        // loading, desmontando o formulário e apagando os campos não salvos.
+        if (userChanged) {
+          setLoading(true);
+          fetchProfile(session.user.id).finally(() => setLoading(false));
+        }
       } else {
         setProfile(null);
         setLoading(false);
@@ -102,4 +113,3 @@ export const useAuth = () => {
   }
   return context;
 }
-

@@ -43,6 +43,8 @@ import { useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+import type { Json, Tables } from "@/integrations/supabase/types";
+import type { LucideIcon } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
@@ -63,7 +65,54 @@ const paymentStatusConfig: Record<string, { label: string; color: string; bg: st
 
 type TabType = "pedidos" | "perfil" | "favoritos" | "carrinho" | "vouchers";
 
-const sidebarItems: { key: TabType; label: string; icon: any }[] = [
+type Voucher = Tables<"vouchers">;
+
+type VoucherRouteLeg = {
+  from?: string;
+  to?: string;
+  date?: string;
+  time?: string;
+};
+
+type VoucherRouteInfo = {
+  departure?: VoucherRouteLeg;
+  return?: VoucherRouteLeg;
+};
+
+type Occupant = {
+  name?: string;
+  cpf?: string;
+  birth_date?: string;
+  is_infant?: boolean;
+};
+
+type FavoriteItem = {
+  id: string;
+  package: {
+    id: string;
+    title: string;
+    slug: string;
+    price: number;
+    cover_image_url: string | null;
+    destination_name: string | null;
+  } | null;
+};
+
+type CartItem = Tables<"cart_items"> & {
+  package: Pick<Tables<"packages">, "id" | "title" | "slug" | "price" | "cover_image_url" | "duration"> | null;
+};
+
+type MenuSelection = { price?: number | string };
+
+function jsonArray<T>(value: Json | null): T[] {
+  return Array.isArray(value) ? value as unknown as T[] : [];
+}
+
+function menuExtrasTotal(value: Json | null) {
+  return jsonArray<MenuSelection>(value).reduce((sum, item) => sum + Number(item.price || 0), 0);
+}
+
+const sidebarItems: { key: TabType; label: string; icon: LucideIcon }[] = [
   { key: "pedidos", label: "Meus Pedidos", icon: Package },
   { key: "favoritos", label: "Favoritos", icon: Heart },
   { key: "carrinho", label: "Carrinho", icon: ShoppingCart },
@@ -76,8 +125,8 @@ function formatCurrency(value: number): string {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
 }
 
-function generateVoucherHTML(voucher: any): string {
-  const inclusions = (voucher.package_inclusions || []) as string[];
+function generateVoucherHTML(voucher: Voucher): string {
+  const inclusions = jsonArray<string>(voucher.package_inclusions);
   const inclusionsHTML = inclusions.length > 0
     ? inclusions.map((inc: string) => `<tr><td style="padding:6px 12px;font-size:14px;color:#374151;">✓ ${inc}</td></tr>`).join("")
     : '<tr><td style="padding:6px 12px;font-size:14px;color:#9ca3af;">Consulte o pacote para detalhes</td></tr>';
@@ -87,7 +136,7 @@ function generateVoucherHTML(voucher: any): string {
     : "A definir";
 
   // Build route HTML
-  const ri = voucher.route_info;
+  const ri = voucher.route_info as VoucherRouteInfo | null;
   let routeHTML = '';
   if (ri && typeof ri === 'object') {
     const dep = ri.departure;
@@ -163,9 +212,9 @@ function generateVoucherHTML(voucher: any): string {
         ${inclusionsHTML}
       </table>
       ${(() => {
-        const occupants = (voucher.occupants || []) as any[];
+        const occupants = jsonArray<Occupant>(voucher.occupants);
         if (occupants.length === 0) return '';
-        const occupantsRows = occupants.map((occ: any) => {
+        const occupantsRows = occupants.map((occ) => {
           const type = occ.is_infant ? '🍼 Colo (grátis)' : 'Passageiro';
           const birthFormatted = occ.birth_date
             ? new Date(occ.birth_date + 'T12:00:00').toLocaleDateString('pt-BR')
@@ -212,7 +261,7 @@ const CustomerDashboard = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get("tab") as TabType | null;
   const [activeTab, setActiveTab] = useState<TabType>(tabParam && sidebarItems.some(s => s.key === tabParam) ? tabParam : "pedidos");
-  const [previewVoucher, setPreviewVoucher] = useState<any>(null);
+  const [previewVoucher, setPreviewVoucher] = useState<Voucher | null>(null);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -247,7 +296,7 @@ const CustomerDashboard = () => {
         .eq("user_id", user!.id)
         .single();
       if (error) throw error;
-      return data;
+      return (data || []) as FavoriteItem[];
     },
   });
 
@@ -261,7 +310,7 @@ const CustomerDashboard = () => {
         .eq("user_id", user!.id)
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return data;
+      return (data || []) as CartItem[];
     },
   });
 
@@ -305,9 +354,9 @@ const CustomerDashboard = () => {
 
   const { data: vouchers = [], isLoading: isLoadingVouchers } = useQuery({
     queryKey: ["customer-vouchers", user?.id],
-    enabled: !!user && (reservations as any[]).length > 0,
+    enabled: !!user && reservations.length > 0,
     queryFn: async () => {
-      const reservationIds = (reservations as any[]).map(r => r.id);
+      const reservationIds = reservations.map((reservation) => reservation.id);
       if (reservationIds.length === 0) return [];
       const { data, error } = await supabase
         .from("vouchers")
@@ -433,10 +482,10 @@ const CustomerDashboard = () => {
     return new Date(dateStr + "T12:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" });
   };
 
-  const confirmedTrips = (reservations as any[]).filter(r => r.status === "confirmado");
-  const pendingTrips = (reservations as any[]).filter(r => r.payment_status === "pendente" && r.status !== "cancelado");
+  const confirmedTrips = reservations.filter((reservation) => reservation.status === "confirmado");
+  const pendingTrips = reservations.filter((reservation) => reservation.payment_status === "pendente" && reservation.status !== "cancelado");
 
-  const handleVoucherDownload = (voucher: any) => {
+  const handleVoucherDownload = (voucher: Voucher) => {
     const html = generateVoucherHTML(voucher);
     const blob = new Blob([html], { type: "text/html" });
     const url = URL.createObjectURL(blob);
@@ -447,7 +496,7 @@ const CustomerDashboard = () => {
     URL.revokeObjectURL(url);
   };
 
-  const handleVoucherPrint = (voucher: any) => {
+  const handleVoucherPrint = (voucher: Voucher) => {
     const html = generateVoucherHTML(voucher);
     const win = window.open("", "_blank");
     if (win) {
@@ -512,7 +561,7 @@ const CustomerDashboard = () => {
                   {/* Quick Stats */}
                   <div className="grid grid-cols-3 gap-2 mt-5">
                     <div className="bg-white/5 rounded-xl p-2.5 text-center backdrop-blur-sm">
-                      <p className="text-xl font-bold">{(reservations as any[]).length}</p>
+                      <p className="text-xl font-bold">{reservations.length}</p>
                       <p className="text-[10px] text-white/40 uppercase tracking-wider">Pedidos</p>
                     </div>
                     <div className="bg-white/5 rounded-xl p-2.5 text-center backdrop-blur-sm">
@@ -520,7 +569,7 @@ const CustomerDashboard = () => {
                       <p className="text-[10px] text-white/40 uppercase tracking-wider">Viagens</p>
                     </div>
                     <div className="bg-white/5 rounded-xl p-2.5 text-center backdrop-blur-sm">
-                      <p className="text-xl font-bold">{(vouchers as any[]).length}</p>
+                      <p className="text-xl font-bold">{vouchers.length}</p>
                       <p className="text-[10px] text-white/40 uppercase tracking-wider">Vouchers</p>
                     </div>
                   </div>
@@ -534,7 +583,7 @@ const CustomerDashboard = () => {
                   const Icon = item.icon;
                   const count = item.key === "carrinho" ? cartItems.length
                     : item.key === "favoritos" ? favorites.length
-                    : item.key === "vouchers" ? (vouchers as any[]).length
+                    : item.key === "vouchers" ? vouchers.length
                     : undefined;
                   return (
                     <button
@@ -601,9 +650,9 @@ const CustomerDashboard = () => {
                       <div className="flex justify-center py-20">
                         <Loader2 className="animate-spin text-muted-foreground" size={32} />
                       </div>
-                    ) : (reservations as any[]).length > 0 ? (
+                    ) : reservations.length > 0 ? (
                       <div className="space-y-3">
-                        {(reservations as any[]).map((r, i) => {
+                        {reservations.map((r, i) => {
                           const payStatus = r.payment_status || "pendente";
                           const payConfig = paymentStatusConfig[payStatus] || paymentStatusConfig["pendente"];
                           const sc = statusConfig[r.status] || statusConfig["novo"];
@@ -706,9 +755,9 @@ const CustomerDashboard = () => {
                         <CardContent className="py-20 text-center">
                           <Plane size={48} className="mx-auto text-muted-foreground/30 mb-4" />
                           <h3 className="text-lg font-bold text-foreground mb-2">Nenhum pedido ainda</h3>
-                          <p className="text-muted-foreground mb-6">Explore nossos destinos e comece sua próxima aventura!</p>
+                          <p className="text-muted-foreground mb-6">Explore nossos pacotes e comece sua próxima aventura!</p>
                           <Button asChild className="rounded-full shadow-md">
-                            <Link to="/destinos">Explorar Destinos</Link>
+                            <Link to="/destinos">Explorar Pacotes</Link>
                           </Button>
                         </CardContent>
                       </Card>
@@ -730,8 +779,8 @@ const CustomerDashboard = () => {
                       </div>
                     ) : favorites.length > 0 ? (
                       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-                        {(favorites as any[]).map((fav, i) => {
-                          const pkg = fav.package as any;
+                        {favorites.map((fav, i) => {
+                          const pkg = fav.package;
                           if (!pkg) return null;
                           return (
                             <motion.div
@@ -821,10 +870,8 @@ const CustomerDashboard = () => {
                       </div>
                     ) : cartItems.length > 0 ? (
                       <div className="space-y-3">
-                        {(cartItems as any[]).map((item, i) => {
-                          const menuExtras = Array.isArray(item.menu_selections)
-                            ? (item.menu_selections as any[]).reduce((s: number, m: any) => s + Number(m.price || 0), 0)
-                            : 0;
+                        {cartItems.map((item, i) => {
+                          const menuExtras = menuExtrasTotal(item.menu_selections);
                           const basePrice = item.package?.price || 0;
                           const subtotal = (basePrice + menuExtras) * item.people;
 
@@ -903,10 +950,8 @@ const CustomerDashboard = () => {
                             <span className="font-bold text-lg text-foreground">Total</span>
                             <span className="text-2xl font-black text-primary">
                               {formatBRL(
-                                (cartItems as any[]).reduce((total, item: any) => {
-                                  const menuExtras = Array.isArray(item.menu_selections)
-                                    ? (item.menu_selections as any[]).reduce((s: number, m: any) => s + Number(m.price || 0), 0)
-                                    : 0;
+                                cartItems.reduce((total, item) => {
+                                  const menuExtras = menuExtrasTotal(item.menu_selections);
                                   return total + ((item.package?.price || 0) + menuExtras) * item.people;
                                 }, 0)
                               )}
@@ -921,7 +966,7 @@ const CustomerDashboard = () => {
                           <h3 className="text-lg font-bold text-foreground mb-2">Carrinho vazio</h3>
                           <p className="text-muted-foreground mb-6">Adicione pacotes ao carrinho para continuar.</p>
                           <Button asChild className="rounded-full shadow-md">
-                            <Link to="/destinos">Explorar Destinos</Link>
+                            <Link to="/destinos">Explorar Pacotes</Link>
                           </Button>
                         </CardContent>
                       </Card>
@@ -941,9 +986,9 @@ const CustomerDashboard = () => {
                       <div className="flex justify-center py-20">
                         <Loader2 className="animate-spin text-muted-foreground" size={32} />
                       </div>
-                    ) : (vouchers as any[]).length > 0 ? (
+                    ) : vouchers.length > 0 ? (
                       <div className="space-y-3">
-                        {(vouchers as any[]).map((v: any, i: number) => (
+                        {vouchers.map((v, i) => (
                           <motion.div
                             key={v.id}
                             initial={{ opacity: 0, y: 10 }}

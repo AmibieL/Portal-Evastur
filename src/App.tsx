@@ -21,36 +21,38 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { lazy, Suspense } from "react";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Index from "./pages/Index";
-import AboutUs from "./pages/AboutUs";
-import Destinations from "./pages/Destinations";
-import DestinationDetails from "./pages/DestinationDetails";
-import PackageDetails from "./pages/PackageDetails";
-import NotFound from "./pages/NotFound";
-import AuthPage from "./pages/AuthPage";
-import CustomerDashboard from "./pages/CustomerDashboard";
 import { AuthProvider } from "./hooks/useAuth";
-import AdminLayout from "./components/admin/AdminLayout";
-import AdminDashboard from "./pages/admin/AdminDashboard";
-import AdminPacotes from "./pages/admin/AdminPacotes";
-import AdminPackageForm from "./pages/admin/AdminPackageForm";
-import AdminDestinations from "./pages/admin/AdminDestinations";
-import AdminReservations from "./pages/admin/AdminReservations";
-import AdminCruzeiro from "./pages/admin/AdminCruzeiro";
-import AdminFinanceiro from "./pages/admin/AdminFinanceiro";
-import AdminConfiguracoes from "./pages/admin/AdminConfiguracoes";
-import AdminVouchers from "./pages/admin/AdminVouchers";
-import ClientTripDetails from "./pages/ClientTripDetails";
-import CruzeiroCategoryDetails from "./pages/CruzeiroCategoryDetails";
-import CartPage from "./pages/CartPage";
-import CheckoutPage from "./pages/CheckoutPage";
-import PaymentSuccessPage from "./pages/PaymentSuccessPage";
-import PaymentCancelPage from "./pages/PaymentCancelPage";
-import ResetPasswordPage from "./pages/ResetPasswordPage";
-import ContactPage from "./pages/ContactPage";
-import NewsletterUnsubscribe from "./pages/NewsletterUnsubscribe";
-import EmailConfirmationPage from "./pages/EmailConfirmationPage";
+import BrandPreloader from "./components/BrandPreloader";
+
+const AboutUs = lazy(() => import("./pages/AboutUs"));
+const Destinations = lazy(() => import("./pages/Destinations"));
+const PackageDetails = lazy(() => import("./pages/PackageDetails"));
+const NotFound = lazy(() => import("./pages/NotFound"));
+const AuthPage = lazy(() => import("./pages/AuthPage"));
+const CustomerDashboard = lazy(() => import("./pages/CustomerDashboard"));
+const AdminLayout = lazy(() => import("./components/admin/AdminLayout"));
+const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"));
+const AdminPacotes = lazy(() => import("./pages/admin/AdminPacotes"));
+const AdminPackageForm = lazy(() => import("./pages/admin/AdminPackageForm"));
+const AdminExternalPackageForm = lazy(() => import("./pages/admin/AdminExternalPackageForm"));
+const AdminRegionalExperienceForm = lazy(() => import("./pages/admin/AdminRegionalExperienceForm"));
+const AdminReservations = lazy(() => import("./pages/admin/AdminReservations"));
+const AdminFinanceiro = lazy(() => import("./pages/admin/AdminFinanceiro"));
+const AdminConfiguracoes = lazy(() => import("./pages/admin/AdminConfiguracoes"));
+const AdminVouchers = lazy(() => import("./pages/admin/AdminVouchers"));
+const ClientTripDetails = lazy(() => import("./pages/ClientTripDetails"));
+const CartPage = lazy(() => import("./pages/CartPage"));
+const CheckoutPage = lazy(() => import("./pages/CheckoutPage"));
+const PaymentSuccessPage = lazy(() => import("./pages/PaymentSuccessPage"));
+const PaymentCancelPage = lazy(() => import("./pages/PaymentCancelPage"));
+const ResetPasswordPage = lazy(() => import("./pages/ResetPasswordPage"));
+const ContactPage = lazy(() => import("./pages/ContactPage"));
+const NewsletterUnsubscribe = lazy(() => import("./pages/NewsletterUnsubscribe"));
+const EmailConfirmationPage = lazy(() => import("./pages/EmailConfirmationPage"));
+const RegionalExperiences = lazy(() => import("./pages/RegionalExperiences"));
 
 const queryClient = new QueryClient();
 
@@ -58,45 +60,53 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
       <TooltipProvider>
+        <BrandPreloader />
         <Toaster />
         <Sonner />
         <BrowserRouter>
-          <Routes>
-            <Route path="/" element={<Index />} />
-            <Route path="/destinos" element={<Destinations />} />
-            <Route path="/sobre" element={<AboutUs />} />
-            <Route path="/destino/:slug" element={<DestinationDetails />} />
-            <Route path="/pacote/:slug" element={<PackageDetails />} />
-            <Route path="/cruzeiro/:slug" element={<CruzeiroCategoryDetails />} />
-            <Route path="/login" element={<AuthPage />} />
-            <Route path="/minha-conta" element={<CustomerDashboard />} />
-            <Route path="/minha-conta/viagem/:id" element={<ClientTripDetails />} />
-            <Route path="/carrinho" element={<CartPage />} />
-            <Route path="/checkout" element={<CheckoutPage />} />
-            <Route path="/pagamento/sucesso" element={<PaymentSuccessPage />} />
-            <Route path="/pagamento/cancelado" element={<PaymentCancelPage />} />
-            <Route path="/redefinir-senha" element={<ResetPasswordPage />} />
-            <Route path="/contato" element={<ContactPage />} />
-            <Route path="/cancelar-newsletter" element={<NewsletterUnsubscribe />} />
-            <Route path="/confirmar-email" element={<EmailConfirmationPage />} />
+          <Suspense fallback={<div className="min-h-screen bg-background" aria-label="Carregando página" />}>
+            <Routes>
+              <Route path="/" element={<Index />} />
+              <Route path="/destinos" element={<Destinations />} />
+              <Route path="/cruzeiro-do-sul" element={<RegionalExperiences />} />
+              <Route path="/sobre" element={<AboutUs />} />
+              <Route path="/destino/:slug" element={<Navigate to="/destinos" replace />} />
+              <Route path="/pacote/:slug" element={<PackageDetails />} />
+              <Route path="/login" element={<AuthPage />} />
+              <Route path="/minha-conta" element={<CustomerDashboard />} />
+              <Route path="/minha-conta/viagem/:id" element={<ClientTripDetails />} />
+              <Route path="/carrinho" element={<CartPage />} />
+              <Route path="/checkout" element={<CheckoutPage />} />
+              <Route path="/pagamento/sucesso" element={<PaymentSuccessPage />} />
+              <Route path="/pagamento/cancelado" element={<PaymentCancelPage />} />
+              <Route path="/redefinir-senha" element={<ResetPasswordPage />} />
+              <Route path="/contato" element={<ContactPage />} />
+              <Route path="/cancelar-newsletter" element={<NewsletterUnsubscribe />} />
+              <Route path="/confirmar-email" element={<EmailConfirmationPage />} />
 
-            {/* ══════ Rotas do Painel Admin (protegidas pelo AdminLayout) ══════ */}
-            <Route path="/admin" element={<AdminLayout />}>
-              <Route index element={<AdminDashboard />} />
-              <Route path="pacotes" element={<AdminPacotes />} />
-              <Route path="pacotes/novo" element={<AdminPackageForm />} />
-              <Route path="pacotes/:id/editar" element={<AdminPackageForm />} />
-              <Route path="destinos" element={<AdminDestinations />} />
-              <Route path="reservas" element={<AdminReservations />} />
-              <Route path="cruzeiro" element={<AdminCruzeiro />} />
-              <Route path="financeiro" element={<AdminFinanceiro />} />
-              <Route path="vouchers" element={<AdminVouchers />} />
-              <Route path="configuracoes" element={<AdminConfiguracoes />} />
-            </Route>
+              {/* ══════ Rotas do Painel Admin (protegidas pelo AdminLayout) ══════ */}
+              <Route path="/admin" element={<AdminLayout />}>
+                <Route index element={<AdminDashboard />} />
+                <Route path="pacotes" element={<AdminPacotes />} />
+                <Route path="pacotes/novo" element={<AdminExternalPackageForm />} />
+                <Route path="pacotes/:id/editar" element={<AdminPackageForm />} />
+                <Route path="pacotes/externos" element={<AdminPacotes packageType="external" />} />
+                <Route path="pacotes/externos/novo" element={<AdminExternalPackageForm />} />
+                <Route path="pacotes/externos/:id/editar" element={<AdminExternalPackageForm />} />
+                <Route path="pacotes/regionais" element={<AdminPacotes packageType="regional" />} />
+                <Route path="pacotes/regionais/novo" element={<AdminRegionalExperienceForm />} />
+                <Route path="pacotes/regionais/:id/editar" element={<AdminRegionalExperienceForm />} />
+                <Route path="destinos/*" element={<Navigate to="/admin/pacotes/regionais" replace />} />
+                <Route path="reservas" element={<AdminReservations />} />
+                <Route path="financeiro" element={<AdminFinanceiro />} />
+                <Route path="vouchers" element={<AdminVouchers />} />
+                <Route path="configuracoes" element={<AdminConfiguracoes />} />
+              </Route>
 
-            {/* ATENÇÃO: Sempre adicionar rotas novas ACIMA desta rota catch-all */}
-            <Route path="*" element={<NotFound />} />
-          </Routes>
+              {/* ATENÇÃO: Sempre adicionar rotas novas ACIMA desta rota catch-all */}
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </Suspense>
         </BrowserRouter>
       </TooltipProvider>
     </AuthProvider>
